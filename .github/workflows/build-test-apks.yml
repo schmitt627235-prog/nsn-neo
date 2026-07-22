@@ -30,10 +30,10 @@ jobs:
         run: ./gradlew --version --no-daemon
 
       - name: Mobile Debug APK bauen
-        run: ./gradlew :app:assembleMobileDebug --no-daemon --max-workers=2 --stacktrace
+        run: ./gradlew :app:assembleMobileDebug --no-daemon --max-workers=2 --stacktrace -Pandroid.useAndroidX=true -Pandroid.enableJetifier=true
 
       - name: TV Debug APK bauen
-        run: ./gradlew :app:assembleTvDebug --no-daemon --max-workers=2 --stacktrace
+        run: ./gradlew :app:assembleTvDebug --no-daemon --max-workers=2 --stacktrace -Pandroid.useAndroidX=true -Pandroid.enableJetifier=true
 
       - name: Erzeugte APKs anzeigen
         if: always()
