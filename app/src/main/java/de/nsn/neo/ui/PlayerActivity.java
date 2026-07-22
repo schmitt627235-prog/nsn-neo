@@ -43,6 +43,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Invisible JavaScript resolver followed by visible Media3 playback only. */
 public final class PlayerActivity extends Activity {
+    public static final String EXTRA_HOSTER = "hoster", EXTRA_SOURCE = "source", EXTRA_HOSTER_NAME = "hosterName";
+    public static final String EXTRA_LANGUAGE = "language", EXTRA_CONTENT = "content", EXTRA_EPISODE = "episode";
+    public static final String EXTRA_TITLE = "title", EXTRA_SUBTITLE = "subtitle", EXTRA_POSTER = "poster";
     private FrameLayout root;
     private WebView resolver;
     private PlaybackEngine playback;
@@ -76,17 +79,19 @@ public final class PlayerActivity extends Activity {
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state); NsnViews.applyMobileImmersiveBars(this); getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); getWindow().setStatusBarColor(Color.BLACK); getWindow().setNavigationBarColor(Color.BLACK);
         application=(NsnApplication)getApplication();
-        String sourceName=getIntent().getStringExtra("source"); source=sourceName==null?null:SourceId.valueOf(sourceName);
-        contentId=getIntent().getStringExtra("content"); episodeId=getIntent().getStringExtra("episode");
-        title=getIntent().getStringExtra("title"); subtitle=getIntent().getStringExtra("subtitle"); posterUrl=getIntent().getStringExtra("poster");
-        language=getIntent().getStringExtra("language");hosterName=getIntent().getStringExtra("hosterName");
+        String sourceName=getIntent().getStringExtra(EXTRA_SOURCE); source=readSource(sourceName);
+        contentId=getIntent().getStringExtra(EXTRA_CONTENT); episodeId=getIntent().getStringExtra(EXTRA_EPISODE);
+        title=getIntent().getStringExtra(EXTRA_TITLE); subtitle=getIntent().getStringExtra(EXTRA_SUBTITLE); posterUrl=getIntent().getStringExtra(EXTRA_POSTER);
+        language=getIntent().getStringExtra(EXTRA_LANGUAGE);hosterName=getIntent().getStringExtra(EXTRA_HOSTER_NAME);
         if(source!=null)resumePosition=application.library().resumePosition(source,contentId,episodeId);
         root=new FrameLayout(this); root.setBackgroundColor(Color.BLACK); setContentView(root);
         playback=application.playback().main(); playback.setOnEndedListener(()->runOnUiThread(this::playNextEpisode)); playback.attach(root,true);
         addTvControls();showControls(true);uiHandler.post(updateProgress);
-        String hoster=getIntent().getStringExtra("hoster");
+        String hoster=getIntent().getStringExtra(EXTRA_HOSTER);
         if(resumePosition>=5_000)showResumeChoice(hoster);else resolveHoster(hoster);
     }
+
+    private static SourceId readSource(String value) { try { return value == null ? null : SourceId.valueOf(value); } catch (IllegalArgumentException e) { return null; } }
 
     private void showResumeChoice(String hoster){
         String time=formatTime(resumePosition);new AlertDialog.Builder(this).setTitle(title==null?"Wiedergabe fortsetzen":title)

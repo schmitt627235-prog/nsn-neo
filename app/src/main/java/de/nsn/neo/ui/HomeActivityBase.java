@@ -86,7 +86,7 @@ public abstract class HomeActivityBase extends Activity {
         root.addView(brandMark,wordmarkParams);
         TextView quickSearch=NsnViews.text(this,"⌕  Suche",isTv()?19:16,Color.WHITE);quickSearch.setGravity(Gravity.CENTER);
         quickSearch.setFocusable(isTv());quickSearch.setClickable(true);quickSearch.setPadding(NsnViews.dp(this,16),0,NsnViews.dp(this,16),0);
-        quickSearch.setBackgroundColor(Color.argb(210,18,18,18));quickSearch.setOnClickListener(v->startActivity(new android.content.Intent(this,SearchActivity.class)));
+        quickSearch.setBackgroundColor(Color.argb(210,18,18,18));quickSearch.setOnClickListener(v->startActivity(NavigationRoutes.search(this)));
         quickSearch.setOnFocusChangeListener((v,f)->{v.setBackgroundColor(f?getColor(R.color.nsn_red):Color.argb(210,18,18,18));v.animate().scaleX(f?1.06f:1f).scaleY(f?1.06f:1f).setDuration(110).start();});
         FrameLayout.LayoutParams searchParams=new FrameLayout.LayoutParams(NsnViews.dp(this,isTv()?150:112),NsnViews.dp(this,isTv()?48:42),Gravity.TOP|Gravity.START);
         searchParams.leftMargin=NsnViews.dp(this,isTv()?20:10);searchParams.topMargin=NsnViews.dp(this,isTv()?12:64);root.addView(quickSearch,searchParams);
@@ -115,8 +115,8 @@ public abstract class HomeActivityBase extends Activity {
             item.setGravity(Gravity.CENTER); item.setFocusable(isTv()); item.setClickable(true);
             if(label.equals(activeSection))item.setTextColor(getColor(R.color.nsn_red));
             item.setPadding(NsnViews.dp(this, 18), 0, NsnViews.dp(this, 18), 0);
-            if ("Konten".equals(label)) item.setOnClickListener(v -> startActivity(new android.content.Intent(this, AccountsActivity.class)));
-            if ("Suche".equals(label)) item.setOnClickListener(v -> startActivity(new android.content.Intent(this, SearchActivity.class)));
+            if ("Konten".equals(label)) item.setOnClickListener(v -> startActivity(NavigationRoutes.accounts(this)));
+            if ("Suche".equals(label)) item.setOnClickListener(v -> startActivity(NavigationRoutes.search(this)));
             if ("Start".equals(label)||"Anime".equals(label)||"Serien".equals(label)||"Filme".equals(label)||"Meine Liste".equals(label)) item.setOnClickListener(v->{activeSection=label;showHome();});
             if (isTv()) item.setOnFocusChangeListener((v, focused) -> {
                 v.setBackgroundColor(focused ? getColor(R.color.nsn_red) : Color.TRANSPARENT);
@@ -208,8 +208,7 @@ public abstract class HomeActivityBase extends Activity {
     }
 
     private void resume(PlaybackRecord record){
-        android.content.Intent intent=new android.content.Intent(this,DetailActivity.class);intent.putExtra("source",record.source.name());
-        intent.putExtra("content",record.contentId);startActivity(intent);
+        startActivity(NavigationRoutes.detail(this, record.source, record.contentId));
     }
 
     private void addSourceRail(LinearLayout target, SourceProvider provider) {
@@ -273,10 +272,7 @@ public abstract class HomeActivityBase extends Activity {
     private void addCalendarEntry(LinearLayout column,MediaItem item){TextView entry=NsnViews.text(this,"",isTv()?13:12,Color.WHITE);String value=item.description+"\n"+item.title;android.text.SpannableString styled=new android.text.SpannableString(value);if(value.startsWith("✓"))styled.setSpan(new android.text.style.ForegroundColorSpan(Color.rgb(75,210,60)),0,1,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);entry.setText(styled);entry.setMaxLines(3);entry.setFocusable(isTv());entry.setClickable(true);entry.setTag(item);entry.setPadding(12,8,12,8);entry.setBackgroundColor(Color.argb(210,20,20,20));entry.setOnClickListener(v->openDetails((MediaItem)v.getTag()));entry.setOnFocusChangeListener((v,f)->v.setBackgroundColor(f?getColor(R.color.nsn_red):Color.argb(210,20,20,20)));column.addView(entry,new LinearLayout.LayoutParams(-1,-2));}
 
     private void openDetails(MediaItem item) {
-        android.content.Intent intent = new android.content.Intent(this, DetailActivity.class);
-        intent.putExtra("source", item.source.name());
-        intent.putExtra("content", item.detailUrl == null ? item.id : item.detailUrl);
-        startActivity(intent);
+        startActivity(NavigationRoutes.detail(this, item));
     }
 
     private boolean handleTvNavigation(int keyCode, KeyEvent event) {

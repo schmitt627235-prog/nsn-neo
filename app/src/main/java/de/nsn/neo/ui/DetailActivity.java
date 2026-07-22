@@ -31,6 +31,8 @@ import java.util.Set;
 
 /** Native detail page: source HTML is parsed but never shown. */
 public final class DetailActivity extends Activity {
+    public static final String EXTRA_SOURCE = "source";
+    public static final String EXTRA_CONTENT = "content";
     private LinearLayout content;
     private SourceProvider provider;
     private String contentId;
@@ -45,18 +47,29 @@ public final class DetailActivity extends Activity {
         super.onCreate(state);
         NsnViews.applyMobileImmersiveBars(this);
         getWindow().setStatusBarColor(Color.BLACK); getWindow().setNavigationBarColor(Color.BLACK);
-        SourceId source = SourceId.valueOf(getIntent().getStringExtra("source"));
-        provider = ((NsnApplication) getApplication()).sources().get(source);
-        contentId = getIntent().getStringExtra("content");
+        SourceId source = readSource(getIntent().getStringExtra(EXTRA_SOURCE));
+        contentId = getIntent().getStringExtra(EXTRA_CONTENT);
         detailScroll = new ScrollView(this); content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL); content.setBackgroundColor(Color.BLACK);
         TextView loading = NsnViews.text(this, "Details werden geladen …", BuildConfig.IS_TV ? 24 : 18, Color.WHITE);
         loading.setPadding(NsnViews.dp(this, 30), NsnViews.dp(this, 50), 0, 0); content.addView(loading);
         detailScroll.addView(content); setContentView(detailScroll);
+        if (source == null || contentId == null || contentId.trim().isEmpty()) {
+            loading.setText("Ungültiger Inhalt");
+            return;
+        }
+        provider = ((NsnApplication) getApplication()).sources().get(source);
+        if (provider == null) { loading.setText("Quelle nicht verfügbar"); return; }
         provider.details(contentId, new Callback<MediaItem>() {
             @Override public void onSuccess(MediaItem value) { runOnUiThread(() -> showDetails(value)); }
             @Override public void onError(Throwable error) { runOnUiThread(() -> loading.setText("Details konnten nicht geladen werden")); }
         });
+    }
+
+    private static SourceId readSource(String value) {
+        if (value == null) return null;
+        try { return SourceId.valueOf(value); }
+        catch (IllegalArgumentException ignored) { return null; }
     }
 
     private void showDetails(MediaItem item) {
