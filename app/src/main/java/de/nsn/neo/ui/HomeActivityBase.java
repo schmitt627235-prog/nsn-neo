@@ -61,7 +61,9 @@ public abstract class HomeActivityBase extends Activity {
     private void showHome() {
         FrameLayout root = new FrameLayout(this); root.setBackgroundColor(Color.BLACK);
         ImageView fixedBackground = new ImageView(this); fixedBackground.setImageResource(R.drawable.nsn_home_background);
-        fixedBackground.setScaleType(ImageView.ScaleType.CENTER_CROP); fixedBackground.setAlpha(isTv() ? .28f : .22f);
+        // Keep the brand texture as a restrained backdrop.  Content cards and
+        // headings must remain the visual focus, especially on mobile screens.
+        fixedBackground.setScaleType(ImageView.ScaleType.CENTER_CROP); fixedBackground.setAlpha(isTv() ? .12f : .08f);
         root.addView(fixedBackground, new FrameLayout.LayoutParams(-1,-1));
         LinearLayout page = new LinearLayout(this); page.setOrientation(LinearLayout.VERTICAL);
         navigation = createNavigation();
@@ -158,6 +160,17 @@ public abstract class HomeActivityBase extends Activity {
     private void addContinueWatching(LinearLayout target){
         List<PlaybackRecord> records=((NsnApplication)getApplication()).library().playback();
         if(records.isEmpty())return;
+        // A series is represented by one visible card.  Keep all episode
+        // records in the store, but show the episode with the newest playback
+        // timestamp so resume always continues the most recently watched one.
+        java.util.LinkedHashMap<String,PlaybackRecord> latestBySeries=new java.util.LinkedHashMap<>();
+        for(PlaybackRecord record:records){
+            String seriesKey=record.source.name()+"|"+(record.contentId==null?"":record.contentId);
+            PlaybackRecord current=latestBySeries.get(seriesKey);
+            if(current==null||record.updatedAt>current.updatedAt)latestBySeries.put(seriesKey,record);
+        }
+        records=new ArrayList<>(latestBySeries.values());
+        records.sort(Comparator.comparingLong((PlaybackRecord r)->r.updatedAt).reversed());
         target.addView(NsnViews.heading(this,"Weiterschauen",isTv())); HorizontalScrollView scroll=new HorizontalScrollView(this);
         scroll.setHorizontalScrollBarEnabled(false);scroll.setClipChildren(false);scroll.setClipToPadding(false);
         LinearLayout row=new LinearLayout(this);row.setOrientation(LinearLayout.HORIZONTAL);row.setClipChildren(false);
