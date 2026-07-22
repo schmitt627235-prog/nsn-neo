@@ -1,0 +1,5 @@
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/nsn_black" />
+    <item android:drawable="@drawable/nsn_logo" android:gravity="center" android:width="96dp" android:height="96dp" />
+</layer-list>
+

@@ -1,0 +1,81 @@
+apply plugin: 'com.android.application'
+
+android {
+    namespace 'de.nsn.neo'
+    compileSdk 35
+    buildToolsVersion '35.0.0'
+
+    defaultConfig {
+        applicationId 'de.nsn.neo'
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName '0.1.0'
+    }
+
+    flavorDimensions += 'device'
+    productFlavors {
+        mobile {
+            dimension 'device'
+            applicationIdSuffix '.mobile'
+            versionNameSuffix '-mobile'
+            buildConfigField 'boolean', 'IS_TV', 'false'
+        }
+        tv {
+            dimension 'device'
+            applicationIdSuffix '.tv'
+            versionNameSuffix '-tv'
+            buildConfigField 'boolean', 'IS_TV', 'true'
+        }
+    }
+
+    buildFeatures { buildConfig true }
+    sourceSets {
+        main.java.srcDirs += [
+                '../core-model/src/main/java',
+                '../core-source-api/src/main/java',
+                '../core-session/src/main/java',
+                '../core-player/src/main/java',
+                '../source-aniworld/src/main/java',
+                '../source-serienstreams/src/main/java',
+                '../source-filmpalast/src/main/java'
+        ]
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    // 1.6.1 retains compileSdk 35 compatibility for the Fire OS 7 build toolchain.
+    implementation 'androidx.media3:media3-exoplayer:1.6.1'
+    implementation 'androidx.media3:media3-exoplayer-hls:1.6.1'
+    implementation 'androidx.media3:media3-exoplayer-dash:1.6.1'
+    implementation 'androidx.media3:media3-ui:1.6.1'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-savedstate:2.9.4'
+    // Required at runtime by Amazon WebView 138 on Fire OS 7.
+    implementation 'androidx.window.extensions.core:core:1.0.0'
+    implementation 'org.jsoup:jsoup:1.21.2'
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+}
+
+afterEvaluate {
+    ['MobileDebug', 'TvDebug'].each { variantName ->
+        def compileTask = tasks.named("compile${variantName}JavaWithJavac")
+        tasks.register("export${variantName}Javac") {
+            dependsOn "process${variantName}Resources", "generate${variantName}BuildConfig", "javaPreCompile${variantName}"
+            doLast {
+                def task = compileTask.get()
+                def exportDir = file("$projectDir/../manual/gradle-javac")
+                exportDir.mkdirs()
+                file("$exportDir/${variantName}.classpath").text = task.classpath.asPath
+                file("$exportDir/${variantName}.destination").text = task.destinationDirectory.get().asFile.absolutePath
+                file("$exportDir/${variantName}.sources").text = task.source.files.collect { it.absolutePath }.join(System.lineSeparator())
+            }
+        }
+        if (project.hasProperty('externalSandboxJavac')) {
+            compileTask.configure { onlyIf { false } }
+        }
+    }
+}

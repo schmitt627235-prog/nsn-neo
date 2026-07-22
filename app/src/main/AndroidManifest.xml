@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <application
+        android:name=".NsnApplication"
+        android:allowBackup="false"
+        android:hardwareAccelerated="true"
+        android:usesCleartextTraffic="true"
+        android:icon="@drawable/nsn_app_icon"
+        android:theme="@style/Theme.NSN"
+        android:label="NEXT-STREAMING-NEO">
+        <activity android:name=".ui.DetailActivity" android:exported="false" />
+        <activity android:name=".ui.PlayerActivity" android:exported="false" android:configChanges="keyboardHidden|orientation|screenSize" />
+        <activity android:name=".ui.AccountsActivity" android:exported="false" />
+        <activity android:name=".ui.SearchActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
+    </application>
+</manifest>

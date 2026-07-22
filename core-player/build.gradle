@@ -1,0 +1,20 @@
+apply plugin: 'com.android.library'
+evaluationDependsOn(':core-model')
+
+android {
+    namespace 'de.nsn.neo.player'
+    compileSdk 35
+    buildToolsVersion '35.0.0'
+    defaultConfig { minSdk 26 }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+}
+
+def coreModelJar = project(':core-model').tasks.named('jar').flatMap { it.archiveFile }
+dependencies {
+    api files(coreModelJar)
+    api 'androidx.media3:media3-exoplayer:1.6.1'
+    implementation 'androidx.media3:media3-exoplayer-hls:1.6.1'
+    implementation 'androidx.media3:media3-exoplayer-dash:1.6.1'
+    api 'androidx.media3:media3-ui:1.6.1'
+}
+tasks.withType(JavaCompile).configureEach { dependsOn ':core-model:jar' }

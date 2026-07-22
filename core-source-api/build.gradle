@@ -1,0 +1,6 @@
+apply plugin: 'java-library'
+evaluationDependsOn(':core-model')
+java { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
+def coreModelJar = project(':core-model').tasks.named('jar').flatMap { it.archiveFile }
+dependencies { api files(coreModelJar) }
+tasks.withType(JavaCompile).configureEach { dependsOn ':core-model:jar' }

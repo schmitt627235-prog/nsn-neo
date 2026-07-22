@@ -1,0 +1,8 @@
+<resources>
+    <color name="nsn_black">#050505</color>
+    <color name="nsn_panel">#151515</color>
+    <color name="nsn_red">#E50914</color>
+    <color name="nsn_text">#F5F5F5</color>
+    <color name="nsn_muted">#B3B3B3</color>
+</resources>
+

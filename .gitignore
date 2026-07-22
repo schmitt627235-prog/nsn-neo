@@ -1,0 +1,22 @@
+# Local build and IDE state
+.gradle/
+.gradle-*/
+**/build/
+**/build-*/
+outputs/
+manual/build-*/
+
+# Machine-local configuration and credentials
+local.properties
+.env
+*.jks
+*.keystore
+*.p12
+*.cer
+gradle.properties
+
+# Diagnostic captures and generated local probes
+*.pml
+*.log
+adb-*.png
+adb-*.xml

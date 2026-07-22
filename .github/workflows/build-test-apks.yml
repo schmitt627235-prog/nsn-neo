@@ -1,0 +1,60 @@
+name: NSN Test APKs
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+
+      - name: Java 17 einrichten
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Gradle Wrapper ausführbar machen
+        run: chmod +x gradlew
+
+      - name: Gradle-Umgebung anzeigen
+        run: ./gradlew --version --no-daemon
+
+      - name: Mobile Debug APK bauen
+        run: ./gradlew :app:assembleMobileDebug --no-daemon --max-workers=2 --stacktrace
+
+      - name: TV Debug APK bauen
+        run: ./gradlew :app:assembleTvDebug --no-daemon --max-workers=2 --stacktrace
+
+      - name: Erzeugte APKs anzeigen
+        if: always()
+        run: find app/build/outputs -type f -name '*.apk' -print || true
+
+      - name: Test-APKs bereitstellen
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: NSN-Test-APKs
+          path: app/build/outputs/apk/**/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Buildberichte bei Fehler bereitstellen
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: NSN-Buildberichte
+          path: |
+            app/build/reports/**
+            app/build/outputs/logs/**
+          if-no-files-found: ignore
+          retention-days: 7
