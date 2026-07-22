@@ -70,6 +70,10 @@ public abstract class HomeActivityBase extends Activity {
         ScrollView vertical = new ScrollView(this); vertical.setFillViewport(true);
         LinearLayout content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL); content.setClipChildren(false);
         content.setPadding(0,NsnViews.dp(this,isTv()?58:52),0,NsnViews.dp(this,40));
+        // Phase 6: keep the Netflix-like hero as the first content block.  It
+        // uses the existing NSN artwork only; source data and navigation stay
+        // unchanged.  Rows below remain horizontally scrollable.
+        content.addView(createHero(), new LinearLayout.LayoutParams(-1, NsnViews.dp(this, isTv() ? 360 : 270)));
         if("Start".equals(activeSection)){addContinueWatching(content);addFavorites(content);}
         else if("Meine Liste".equals(activeSection))addFavorites(content);
         if(!"Meine Liste".equals(activeSection))for(SourceProvider provider:((NsnApplication)getApplication()).sources().all())if(matchesSection(provider.id()))addSourceRail(content,provider);
@@ -113,8 +117,10 @@ public abstract class HomeActivityBase extends Activity {
         for (String label : labels) {
             TextView item = NsnViews.text(this, label, isTv() ? 17 : 14, Color.WHITE);
             item.setGravity(Gravity.CENTER); item.setFocusable(isTv()); item.setClickable(true);
+            item.setSingleLine(true);
             if(label.equals(activeSection))item.setTextColor(getColor(R.color.nsn_red));
-            item.setPadding(NsnViews.dp(this, 18), 0, NsnViews.dp(this, 18), 0);
+            int horizontalPadding = isTv() ? 18 : 10;
+            item.setPadding(NsnViews.dp(this, horizontalPadding), 0, NsnViews.dp(this, horizontalPadding), 0);
             if ("Konten".equals(label)) item.setOnClickListener(v -> startActivity(NavigationRoutes.accounts(this)));
             if ("Suche".equals(label)) item.setOnClickListener(v -> startActivity(NavigationRoutes.search(this)));
             if ("Start".equals(label)||"Anime".equals(label)||"Serien".equals(label)||"Filme".equals(label)||"Meine Liste".equals(label)) item.setOnClickListener(v->{activeSection=label;showHome();});

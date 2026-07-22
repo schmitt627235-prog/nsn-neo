@@ -38,7 +38,8 @@ public final class NsnViews {
     public static TextView heading(Context context, String value, boolean tv) {
         TextView view = text(context, value, tv ? 26 : 22, Color.WHITE);
         view.setTypeface(null, android.graphics.Typeface.BOLD);
-        view.setPadding(dp(context, 18), dp(context, 22), dp(context, 12), dp(context, 12));
+        // Compact section rhythm on mobile; TV keeps the wider streaming-app spacing.
+        view.setPadding(dp(context, 18), dp(context, tv ? 22 : 14), dp(context, 12), dp(context, tv ? 12 : 8));
         return view;
     }
 
