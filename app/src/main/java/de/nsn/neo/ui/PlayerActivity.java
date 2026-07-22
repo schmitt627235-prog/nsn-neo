@@ -1,4 +1,4 @@
-﻿package de.nsn.neo.ui;
+package de.nsn.neo.ui;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
