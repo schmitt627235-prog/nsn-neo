@@ -16,20 +16,16 @@ import de.nsn.neo.model.MediaItem;
 import de.nsn.neo.model.SourceId;
 import de.nsn.neo.source.Callback;
 import de.nsn.neo.source.GenreLink;
-import de.nsn.neo.source.HomeSection;
 import de.nsn.neo.source.SourceProvider;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Random;
 
 /**
  * Native discovery generator. It deliberately uses the existing providers
  * instead of displaying either source website or its hoster UI.
  */
 public final class DiscoverActivity extends Activity {
-    private final Random random=new Random();
     private LinearLayout content;
+    private LinearLayout resultHost;
     private SourceId selectedSource=SourceId.ANIWORLD;
     private GenreLink selectedGenre;
     private boolean episodeMode;
@@ -115,6 +111,9 @@ public final class DiscoverActivity extends Activity {
         LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(-2,-2);
         params.topMargin=NsnViews.dp(this,18);
         content.addView(generate,params);
+        resultHost=new LinearLayout(this);
+        resultHost.setOrientation(LinearLayout.VERTICAL);
+        content.addView(resultHost,new LinearLayout.LayoutParams(-1,-2));
     }
 
     private void generate(TextView button){
@@ -125,33 +124,34 @@ public final class DiscoverActivity extends Activity {
             @Override public void onSuccess(List<MediaItem> items){runOnUiThread(()->showResult(button,items));}
             @Override public void onError(Throwable error){runOnUiThread(()->showResult(button,List.of()));}
         };
-        if(selectedGenre!=null)provider.genreItems(selectedGenre.url,callback);
-        else provider.home(new Callback<List<HomeSection>>(){
-            @Override public void onSuccess(List<HomeSection> sections){
-                LinkedHashMap<String,MediaItem> unique=new LinkedHashMap<>();
-                for(HomeSection section:sections)for(MediaItem item:section.items)unique.putIfAbsent(item.id,item);
-                callback.onSuccess(new ArrayList<>(unique.values()));
-            }
-            @Override public void onError(Throwable error){callback.onError(error);}
-        });
+        provider.discover(selectedGenre==null?null:selectedGenre.url,20,callback);
     }
 
     private void showResult(TextView button,List<MediaItem> items){
         button.setEnabled(true);
         button.setText("↻ Neu würfeln");
+        resultHost.removeAllViews();
         if(items.isEmpty()){
-            TextView empty=NsnViews.text(this,"Für diese Auswahl wurde kein Inhalt gefunden.",BuildConfig.IS_TV?17:14,getColor(R.color.nsn_muted));
-            content.addView(empty);
+            resultHost.addView(NsnViews.text(this,"Für diese Auswahl wurde kein Inhalt gefunden.",
+                    BuildConfig.IS_TV?17:14,getColor(R.color.nsn_muted)));
             return;
         }
-        MediaItem item=items.get(random.nextInt(items.size()));
-        content.addView(NsnViews.heading(this,episodeMode?"Zufällige Episode aus:":"Dein Vorschlag",BuildConfig.IS_TV));
-        View card=NsnViews.card(this,item,BuildConfig.IS_TV,v->
-                startActivity(NavigationRoutes.detail(this,item.source,item.id)));
-        content.addView(card);
-        TextView open=NsnViews.action(this,episodeMode?"Episoden öffnen":"Details öffnen",true,BuildConfig.IS_TV);
-        open.setOnClickListener(v->startActivity(NavigationRoutes.detail(this,item.source,item.id)));
-        content.addView(open,new LinearLayout.LayoutParams(-2,-2));
+        resultHost.addView(NsnViews.heading(this,
+                episodeMode?"20 zufällige Episoden":"20 zufällige Titel",BuildConfig.IS_TV));
+        HorizontalScrollView scroll=new HorizontalScrollView(this);
+        scroll.setHorizontalScrollBarEnabled(false);
+        LinearLayout row=new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        for(MediaItem item:items){
+            View card=NsnViews.card(this,item,BuildConfig.IS_TV,v->
+                    startActivity(NavigationRoutes.detail(this,item.source,item.id)));
+            LinearLayout.LayoutParams cardParams=new LinearLayout.LayoutParams(
+                    NsnViews.dp(this,BuildConfig.IS_TV?260:176),-2);
+            cardParams.setMargins(0,0,NsnViews.dp(this,12),0);
+            row.addView(card,cardParams);
+        }
+        scroll.addView(row,new HorizontalScrollView.LayoutParams(-2,-2));
+        resultHost.addView(scroll,new LinearLayout.LayoutParams(-1,-2));
     }
 
     private SourceProvider provider(){

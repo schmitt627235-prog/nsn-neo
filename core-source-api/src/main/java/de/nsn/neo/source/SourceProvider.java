@@ -16,6 +16,10 @@ public interface SourceProvider {
     default void calendar(Callback<List<MediaItem>> callback) { callback.onSuccess(List.of()); }
     default void genres(Callback<List<GenreLink>> callback) { callback.onSuccess(List.of()); }
     default void genreItems(String genreUrl, Callback<List<MediaItem>> callback) { callback.onSuccess(List.of()); }
+    default void discover(String genreUrl, int limit, Callback<List<MediaItem>> callback) {
+        if (genreUrl != null && !genreUrl.isBlank()) genreItems(genreUrl, callback);
+        else callback.onSuccess(List.of());
+    }
     void search(String query, Callback<List<MediaItem>> callback);
     void details(String contentId, Callback<MediaItem> callback);
     void episodes(String contentId, Callback<List<Episode>> callback);

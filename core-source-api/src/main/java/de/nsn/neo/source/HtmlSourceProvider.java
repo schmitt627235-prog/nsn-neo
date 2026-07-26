@@ -10,6 +10,7 @@ import de.nsn.neo.model.StreamRequest;
 import de.nsn.neo.session.SourceSession;
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -68,6 +69,27 @@ public abstract class HtmlSourceProvider implements SourceProvider {
     }
     @Override public void genreItems(String genreUrl, Callback<List<MediaItem>> callback) {
         async(callback, () -> cards(load(absolute(genreUrl)), 100));
+    }
+    @Override public void discover(String genreUrl, int limit, Callback<List<MediaItem>> callback) {
+        async(callback, () -> {
+            Map<String,MediaItem> unique=new LinkedHashMap<>();
+            if(genreUrl!=null&&!genreUrl.isBlank()){
+                for(MediaItem item:cards(load(absolute(genreUrl)),100))unique.putIfAbsent(item.id,item);
+            }else{
+                Document landing=load(homeUrl());
+                List<GenreLink> genres=new ArrayList<>(parseGenreLinks(landing));
+                Collections.shuffle(genres);
+                int loaded=0;
+                for(GenreLink genre:genres){
+                    for(MediaItem item:cards(load(absolute(genre.url)),100))unique.putIfAbsent(item.id,item);
+                    if(++loaded>=6||unique.size()>=Math.max(limit*3,60))break;
+                }
+                if(unique.isEmpty())for(MediaItem item:cards(landing,100))unique.putIfAbsent(item.id,item);
+            }
+            List<MediaItem> result=new ArrayList<>(unique.values());
+            Collections.shuffle(result);
+            return result.size()>limit?new ArrayList<>(result.subList(0,limit)):result;
+        });
     }
     @Override public void details(String contentId, Callback<MediaItem> callback) {
         async(callback, () -> parseDetail(load(absolute(contentId)), absolute(contentId)));

@@ -59,10 +59,10 @@ public final class SerienStreamsSource extends HtmlSourceProvider {
         Document doc=load(homeUrl());List<HomeSection> sections=new ArrayList<>();
         List<MediaItem> latest=sectionCards(doc,"Neue Episoden",50);
         if(latest.isEmpty())latest=sectionCards(doc,"Neu auf SerienStream",50);
-        add(sections,"series-latest","Neueste Folgen von SerienStreams",latest);
+        add(sections,"series-latest","Neueste Serien",latest);
         List<MediaItem> popular=sectionCards(doc,"Die Beliebtesten",40);
         if(popular.isEmpty())popular=sectionCards(doc,"Aktuell beliebt",40);
-        add(sections,"series-popular","Beliebt bei SerienStreams",popular);
+        add(sections,"series-popular","Beliebte Serien",popular);
         if(sections.isEmpty())sections.add(new HomeSection("series-home","Beliebte Serien",cards(doc,60)));
         return sections;
     });}

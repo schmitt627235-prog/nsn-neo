@@ -32,8 +32,8 @@ public final class AniWorldSource extends HtmlSourceProvider {
         for(String candidate:DOMAIN_CANDIDATES){try{Document checked=load(candidate+"home");if(!isAniWorldPage(checked))continue;activeBase=candidate;doc=checked;break;}catch(Exception error){last=error;}}
         if(doc==null){if(last!=null)throw last;throw new IllegalStateException("AniWorld-Seite enthält keine erwarteten Anime-Merkmale");}
         List<HomeSection> sections=new ArrayList<>();
-        add(sections,"ani-latest","Die 50 neuesten Episoden",latestEpisodes(doc,50));
-        add(sections,"ani-popular","Beliebt bei AniWorld",sectionCards(doc,"Beliebt bei AniWorld",30));
+        add(sections,"ani-latest","Die 50 neuesten Anime-Episoden",latestEpisodes(doc,50));
+        add(sections,"ani-popular","Aktuell beliebte Anime",sectionCards(doc,"Beliebt bei AniWorld",30));
         if(sections.isEmpty())sections.add(new HomeSection("ani-home","Beliebte Anime",cards(doc,60)));
         return sections;
     });}

@@ -32,7 +32,7 @@ public final class FilmpalastSource extends HtmlSourceProvider {
     @Override public void homePage(int page,Callback<List<HomeSection>> callback){async(callback,()->{
         List<HomeSection> sections=new ArrayList<>();
         String url=METADATA.baseUrl+(page>1?"page/"+page:"");
-        List<MediaItem> newest=cards(load(url),60);if(!newest.isEmpty())sections.add(new HomeSection("movies-new","Neu bei Filmpalast · Seite "+page,newest));
+        List<MediaItem> newest=cards(load(url),60);if(!newest.isEmpty())sections.add(new HomeSection("movies-new","Neueste Filme · Seite "+page,newest));
         return sections;
     });}
     @Override public void search(String query,Callback<List<MediaItem>> callback){async(callback,()->{
@@ -63,16 +63,37 @@ public final class FilmpalastSource extends HtmlSourceProvider {
 
     @Override public void hosters(String contentId, String episodeId, String language, Callback<List<HosterOption>> callback) {
         async(callback, () -> {
-            Document doc=load(absolute(contentId));List<HosterOption> result=new ArrayList<>();
-            for(Element link:doc.select("a[href*='voe.'], a[href*='dood.'], a[href*='streamtape.'], a[href*='vidoza.'], a[href*='vidmoly.'], a[href*='filemoon.']")){
-                String url=link.absUrl("href");if(url.isBlank())url=absolute(link.attr("href"));
-                String host;
-                try{host=java.net.URI.create(url).getHost();}catch(Exception ignored){host=link.text();}
-                if(host==null||host.isBlank())host="Stream";
-                boolean exists=false;for(HosterOption item:result)if(item.url.equals(url)){exists=true;break;}
-                if(!exists)result.add(new HosterOption(url,host.replace("www.",""),url,language));
+            Document doc=load(absolute(contentId));Map<String,HosterOption> result=new LinkedHashMap<>();
+            for(Element link:doc.select("a[href], [data-url], [data-href], [data-link], [data-src], [data-play-url], [onclick]")){
+                String url=firstNonBlank(link.absUrl("href"),link.attr("data-url"),link.attr("data-href"),
+                        link.attr("data-link"),link.attr("data-src"),link.attr("data-play-url"));
+                if(url.isBlank()&&link.hasAttr("onclick")){
+                    java.util.regex.Matcher match=java.util.regex.Pattern
+                            .compile("(?i)(https?://[^'\\\"\\s)]+|/[^'\\\"\\s)]+(?:redirect|stream)[^'\\\"\\s)]*)")
+                            .matcher(link.attr("onclick"));
+                    if(match.find())url=match.group(1);
+                }
+                if(url.isBlank())continue;
+                if(url.startsWith("/"))url=absolute(url);
+                String hint=(link.text()+" "+link.attr("title")+" "+link.attr("class")+" "+url)
+                        .toLowerCase(java.util.Locale.ROOT);
+                String host=hosterName(hint,url);
+                if(host!=null)result.putIfAbsent(url,new HosterOption(url,host,url,language));
             }
-            return result;
+            return new ArrayList<>(result.values());
         });
+    }
+    private static String firstNonBlank(String... values){for(String value:values)if(value!=null&&!value.isBlank())return value;return "";}
+    private static String hosterName(String hint,String url){
+        String[][] known={{"voe","VOE"},{"dood","Doodstream"},{"streamtape","Streamtape"},
+                {"vidoza","Vidoza"},{"vidmoly","Vidmoly"},{"filemoon","Filemoon"},
+                {"streamwish","Streamwish"},{"lulustream","Lulustream"},{"speedfiles","SpeedFiles"},
+                {"upstream","Upstream"},{"mixdrop","MixDrop"}};
+        for(String[] host:known)if(hint.contains(host[0]))return host[1];
+        if(hint.contains("/redirect/")){
+            try{String domain=java.net.URI.create(url).getHost();return domain==null?"Stream":domain.replace("www.","");}
+            catch(Exception ignored){return "Stream";}
+        }
+        return null;
     }
 }
