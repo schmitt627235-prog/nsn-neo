@@ -8,6 +8,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.ImageView;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import de.nsn.neo.R;
@@ -126,6 +127,27 @@ public final class NsnViews {
         ImageView poster = (ImageView) card.getChildAt(0);
         poster.setScaleType(ImageView.ScaleType.CENTER_CROP);
         PosterLoader.load(poster, item.posterUrl);
+        java.util.regex.Matcher episode=java.util.regex.Pattern
+                .compile("^(S\\d{2}E\\d{2})").matcher(item.description==null?"":item.description);
+        if(episode.find()){
+            android.view.ViewGroup.LayoutParams posterParams=poster.getLayoutParams();
+            card.removeViewAt(0);
+            FrameLayout artwork=new FrameLayout(context);
+            artwork.addView(poster,new FrameLayout.LayoutParams(-1,-1));
+            TextView badge=text(context,episode.group(1),tv?12:10,Color.WHITE);
+            badge.setTypeface(Typeface.create("sans-serif",Typeface.BOLD));
+            badge.setGravity(Gravity.CENTER);
+            badge.setPadding(dp(context,6),dp(context,3),dp(context,6),dp(context,3));
+            GradientDrawable background=new GradientDrawable();
+            background.setColor(Color.argb(235,180,0,10));
+            background.setCornerRadius(dp(context,3));
+            badge.setBackground(background);
+            FrameLayout.LayoutParams badgeParams=new FrameLayout.LayoutParams(-2,dp(context,tv?25:21),
+                    Gravity.BOTTOM|Gravity.CENTER_HORIZONTAL);
+            badgeParams.bottomMargin=dp(context,6);
+            artwork.addView(badge,badgeParams);
+            card.addView(artwork,0,posterParams);
+        }
         card.setTag(item); card.setOnClickListener(click);
         return card;
     }

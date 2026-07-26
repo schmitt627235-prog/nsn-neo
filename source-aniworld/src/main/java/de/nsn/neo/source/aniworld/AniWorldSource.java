@@ -32,7 +32,7 @@ public final class AniWorldSource extends HtmlSourceProvider {
         for(String candidate:DOMAIN_CANDIDATES){try{Document checked=load(candidate+"home");if(!isAniWorldPage(checked))continue;activeBase=candidate;doc=checked;break;}catch(Exception error){last=error;}}
         if(doc==null){if(last!=null)throw last;throw new IllegalStateException("AniWorld-Seite enthält keine erwarteten Anime-Merkmale");}
         List<HomeSection> sections=new ArrayList<>();
-        add(sections,"ani-latest","Die 50 neuesten Anime-Episoden",latestEpisodes(doc,50));
+        add(sections,"ani-latest","Die neuesten Anime-Episoden",latestEpisodes(doc,50));
         add(sections,"ani-popular","Aktuell beliebte Anime",sectionCards(doc,"Beliebt bei AniWorld",30));
         if(sections.isEmpty())sections.add(new HomeSection("ani-home","Beliebte Anime",cards(doc,60)));
         return sections;
@@ -53,25 +53,51 @@ public final class AniWorldSource extends HtmlSourceProvider {
             if(list!=null)break;
         }
         if(list==null)return List.of();
-        List<MediaItem> result=new ArrayList<>();int index=0;
+        Map<String,MediaItem> unique=new LinkedHashMap<>();
         Map<String,String> posterCache=new LinkedHashMap<>();
         for(Element link:list.select("a[href*=/anime/stream/],a[href*='/anime/stream/']")){
-            if(index>=limit)break;
             String url=link.absUrl("href");if(url.isBlank())url=absolute(link.attr("href"));
             Element name=link.selectFirst("strong");String title=name==null?cleanText(link.text()):cleanText(name.text());
             if(title.isBlank()||url.isBlank())continue;
+            String episodeKey=url.replaceFirst("[?#].*$","").replaceFirst("/+$","");
+            if(unique.containsKey(episodeKey))continue;
+            String episodeCode=episodeCode(episodeKey);
             Element tag=link.selectFirst(".listTag");String episode=tag==null?"":cleanText(tag.text());
-            String description=episode.isBlank()?"Neueste Episode":"Neueste Episode · "+episode;
+            String description=(episodeCode.isBlank()?"":episodeCode+" · ")
+                    +(episode.isBlank()?"Neueste Episode":"Neueste Episode · "+episode);
             String detailUrl=url.replaceFirst("/staffel-\\d+.*$","");
             Element image=findCardImage(link);String poster=imageUrl(image);
             if(poster==null&&posterCache.containsKey(detailUrl))poster=posterCache.get(detailUrl);
-            if(poster==null){
-                try{MediaItem detail=parseDetail(load(detailUrl),detailUrl);poster=detail.posterUrl;}catch(Exception ignored){}
-            }
+            if(poster==null)poster=detailPoster(url);
             if(poster!=null)posterCache.put(detailUrl,poster);
-            result.add(new MediaItem(url+"#latest-"+index++,id(),ContentType.ANIME,title,description,poster,poster,detailUrl,List.of(),null,null));
+            unique.put(episodeKey,new MediaItem(episodeKey,id(),ContentType.ANIME,title,description,poster,poster,detailUrl,List.of(),null,null));
+            if(unique.size()>=limit)break;
         }
-        return result;
+        return new ArrayList<>(unique.values());
+    }
+    private static String episodeCode(String url){
+        java.util.regex.Matcher matcher=java.util.regex.Pattern
+                .compile("/staffel-(\\d+)/episode-(\\d+)",java.util.regex.Pattern.CASE_INSENSITIVE)
+                .matcher(url);
+        if(!matcher.find())return "";
+        try{
+            return String.format(java.util.Locale.ROOT,"S%02dE%02d",
+                    Integer.parseInt(matcher.group(1)),Integer.parseInt(matcher.group(2)));
+        }catch(NumberFormatException ignored){
+            return "";
+        }
+    }
+    private String detailPoster(String detailUrl){
+        try{
+            Document detail=load(detailUrl);
+            Element cover=detail.selectFirst(
+                    ".seriesCoverBox img, .seriesCover img, img[itemprop=image], img[src*=/public/img/cover/], img[data-src*=/public/img/cover/]");
+            String poster=imageUrl(cover);
+            if(poster!=null)return poster;
+            Element meta=detail.selectFirst("meta[property=og:image],meta[name=twitter:image]");
+            if(meta!=null&&!meta.attr("content").isBlank())return absolute(meta.attr("content"));
+        }catch(Exception ignored){}
+        return null;
     }
     private static void add(List<HomeSection> target,String id,String title,List<MediaItem> items){if(items!=null&&!items.isEmpty())target.add(new HomeSection(id,title,items));}
     @Override public void episodes(String contentId,Callback<List<Episode>> callback){async(callback,()->{
