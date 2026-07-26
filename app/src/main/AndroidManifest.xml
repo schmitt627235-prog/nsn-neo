@@ -14,5 +14,6 @@
         <activity android:name=".ui.PlayerActivity" android:exported="false" android:configChanges="keyboardHidden|orientation|screenSize" />
         <activity android:name=".ui.AccountsActivity" android:exported="false" />
         <activity android:name=".ui.SearchActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".ui.DiscoverActivity" android:exported="false" />
     </application>
 </manifest>

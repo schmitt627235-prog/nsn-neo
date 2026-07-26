@@ -6,6 +6,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.content.Intent;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
@@ -44,6 +45,8 @@ public abstract class HomeActivityBase extends Activity {
     private LinearLayout homeContent;
     private LinearLayout genreChipsHost;
     private LinearLayout genreRowsHost;
+    private int genreChipScrollX;
+    private final Map<String,Integer> genrePages = new HashMap<>();
     private View lastContentFocus;
     private String pendingFocusKey;
     private String selectedGenre = "Alle";
@@ -237,12 +240,8 @@ public abstract class HomeActivityBase extends Activity {
         LinearLayout actions=new LinearLayout(this);actions.setOrientation(LinearLayout.HORIZONTAL);
         actions.setPadding(0,NsnViews.dp(this,14),0,0);
         TextView play=NsnViews.action(this,"▶  Inhalte entdecken",true,isTv());
-        play.setOnClickListener(v->{if(homeScroll!=null)homeScroll.smoothScrollTo(0,NsnViews.dp(this,isTv()?360:320));});
+        play.setOnClickListener(v->startActivity(new Intent(this,DiscoverActivity.class)));
         actions.addView(play);
-        TextView list=NsnViews.action(this,"＋  Meine Liste",false,isTv());
-        list.setOnClickListener(v->{activeSection="Start";showHome();});
-        LinearLayout.LayoutParams listParams=new LinearLayout.LayoutParams(-2,-2);
-        listParams.leftMargin=NsnViews.dp(this,10);actions.addView(list,listParams);
         copy.addView(actions);
         hero.addView(copy, new FrameLayout.LayoutParams(-1, -1));
         return hero;
@@ -392,7 +391,11 @@ public abstract class HomeActivityBase extends Activity {
         genreChipsHost=new LinearLayout(this);
         genreChipsHost.setOrientation(LinearLayout.VERTICAL);
         target.addView(genreChipsHost,new LinearLayout.LayoutParams(-1,-2));
+        genreRowsHost=new LinearLayout(this);
+        genreRowsHost.setOrientation(LinearLayout.VERTICAL);
+        target.addView(genreRowsHost,new LinearLayout.LayoutParams(-1,-2));
         renderGenreChips();
+        renderGenreResults();
     }
 
     private void addGenreBrowser(LinearLayout target){
@@ -409,6 +412,8 @@ public abstract class HomeActivityBase extends Activity {
 
     private void renderGenreChips(){
         if(genreChipsHost==null)return;
+        if(genreChipsHost.getChildCount()>0&&genreChipsHost.getChildAt(0) instanceof HorizontalScrollView)
+            genreChipScrollX=((HorizontalScrollView)genreChipsHost.getChildAt(0)).getScrollX();
         genreChipsHost.removeAllViews();
         List<String> genres=new ArrayList<>(groupedGenreLinks().keySet());
         genres.sort(String.CASE_INSENSITIVE_ORDER);
@@ -419,6 +424,7 @@ public abstract class HomeActivityBase extends Activity {
         for(String genre:genres)row.addView(genreChip(genre));
         scroll.addView(row,new HorizontalScrollView.LayoutParams(-2,-2));
         genreChipsHost.addView(scroll,new LinearLayout.LayoutParams(-1,-2));
+        scroll.post(()->scroll.scrollTo(genreChipScrollX,0));
     }
 
     private View genreChip(String genre){
@@ -441,15 +447,12 @@ public abstract class HomeActivityBase extends Activity {
             v.animate().scaleX(focused?1.06f:1f).scaleY(focused?1.06f:1f).setDuration(100).start();
         });
         chip.setOnClickListener(v->{
+            if(v.getParent()!=null&&v.getParent().getParent() instanceof HorizontalScrollView)
+                genreChipScrollX=((HorizontalScrollView)v.getParent().getParent()).getScrollX();
             selectedGenre=genre;
-            if(!"Genres".equals(activeSection)){
-                activeSection="Genres";
-                pendingFocusKey="genre|"+genre;
-                showHome();
-            }else{
-                renderGenreChips();
-                renderGenreResults();
-            }
+            pendingFocusKey="genre|"+genre;
+            renderGenreChips();
+            renderGenreResults();
         });
         maybeRestoreFocus(chip);
         return chip;
@@ -464,13 +467,13 @@ public abstract class HomeActivityBase extends Activity {
     }
 
     private void renderGenreResults(){
-        if(genreRowsHost==null||!"Genres".equals(activeSection))return;
+        if(genreRowsHost==null)return;
         genreRowsHost.removeAllViews();
         List<GenreLink> links=groupedGenreLinks().get(selectedGenre);
         if(links==null||links.isEmpty())return;
         String resultKey="genre|"+selectedGenre.toLowerCase(java.util.Locale.ROOT);
         List<MediaItem> items=genreResults.get(resultKey);
-        if(items!=null){addGenreRail(genreRowsHost,selectedGenre,items);return;}
+        if(items!=null){addPagedGenreRail(genreRowsHost,selectedGenre,items);return;}
         if(!loadingGenres.add(resultKey))return;
         TextView loading=NsnViews.text(this,"Genre wird geladen …",isTv()?17:14,getColor(R.color.nsn_muted));
         loading.setPadding(NsnViews.dp(this,20),NsnViews.dp(this,12),0,NsnViews.dp(this,20));
@@ -544,6 +547,35 @@ public abstract class HomeActivityBase extends Activity {
             genreResults.put(key,new ArrayList<>(unique.values()));
             renderGenreResults();
         });
+    }
+
+    private void addPagedGenreRail(LinearLayout target,String genre,List<MediaItem> items){
+        if(items.isEmpty())return;
+        final int pageSize=isTv()?12:10;
+        int page=Math.max(1,genrePages.getOrDefault(genre,1));
+        int pageCount=Math.max(1,(items.size()+pageSize-1)/pageSize);
+        page=Math.min(page,pageCount);
+        genrePages.put(genre,page);
+        int from=(page-1)*pageSize;
+        int to=Math.min(items.size(),from+pageSize);
+        addGenreRail(target,genre+" · Seite "+page+"/"+pageCount,new ArrayList<>(items.subList(from,to)));
+        if(pageCount<=1)return;
+        LinearLayout controls=new LinearLayout(this);
+        controls.setOrientation(LinearLayout.HORIZONTAL);
+        controls.setPadding(NsnViews.dp(this,isTv()?44:14),0,0,NsnViews.dp(this,18));
+        if(page>1){
+            TextView previous=NsnViews.action(this,"‹ Vorherige Seite",false,isTv());
+            previous.setOnClickListener(v->{genrePages.put(genre,genrePages.getOrDefault(genre,1)-1);renderGenreResults();});
+            controls.addView(previous);
+        }
+        if(page<pageCount){
+            TextView next=NsnViews.action(this,"Nächste Seite ›",true,isTv());
+            LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(-2,-2);
+            params.leftMargin=NsnViews.dp(this,10);
+            next.setOnClickListener(v->{genrePages.put(genre,genrePages.getOrDefault(genre,1)+1);renderGenreResults();});
+            controls.addView(next,params);
+        }
+        target.addView(controls,new LinearLayout.LayoutParams(-1,-2));
     }
 
     private void addGenreRail(LinearLayout target,String genre,List<MediaItem> items){
