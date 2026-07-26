@@ -25,9 +25,9 @@ public final class AniWorldSource extends HtmlSourceProvider {
     public static final SourceMetadata METADATA = new SourceMetadata(
             SourceId.ANIWORLD, "AniWorld", "https://aniworld.to/", ContentType.ANIME, true);
     private static final List<String> DOMAIN_CANDIDATES = List.of("https://aniworld.to/", "https://aniworld.cc/");
-    // AniWorld throttles bursts of parallel detail-page requests. Two workers keep
-    // the latest rail responsive without turning valid detail pages into failures.
-    private static final ExecutorService COVER_EXECUTOR = Executors.newFixedThreadPool(2);
+    // AniWorld throttles concurrent detail-page requests. Keep cover enrichment
+    // serial so every latest item receives the same valid page as a normal detail view.
+    private static final ExecutorService COVER_EXECUTOR = Executors.newSingleThreadExecutor();
     private final Map<String,String> posterCache = new ConcurrentHashMap<>();
     private volatile String activeBase = METADATA.baseUrl;
     public AniWorldSource() { super(SourceId.ANIWORLD, METADATA.baseUrl, ContentType.ANIME, true); enableFormLogin(); }
@@ -114,7 +114,7 @@ public final class AniWorldSource extends HtmlSourceProvider {
             Document detail=load(detailUrl);
             Element cover=detail.selectFirst(
                     ".seriesCoverBox > img.loaded, .seriesCoverBox > img[data-src], .seriesCoverBox > img[src]");
-            String poster=imageUrl(cover);
+            String poster=aniWorldCoverUrl(cover,detailUrl);
             if(poster!=null)return poster;
             java.util.regex.Matcher cssCover=java.util.regex.Pattern.compile(
                     "(?is)\\.seriesCoverBox\\s*\\{[^}]*background(?:-image)?\\s*:\\s*url\\(\\s*['\"]?([^)'\"\\s]+)")
@@ -134,6 +134,14 @@ public final class AniWorldSource extends HtmlSourceProvider {
             if(meta!=null&&!meta.attr("content").isBlank())return absolute(meta.attr("content"));
         }catch(Exception ignored){}
         return null;
+    }
+    private String aniWorldCoverUrl(Element cover,String detailUrl){
+        if(cover==null)return null;
+        String value=cover.attr("data-src").trim();
+        if(value.isBlank())value=cover.attr("src").trim();
+        if(value.isBlank())return null;
+        try{return URI.create(detailUrl).resolve(value).toString();}
+        catch(Exception ignored){return absolute(value);}
     }
     private String containerPoster(Element container){
         if(container==null)return null;
