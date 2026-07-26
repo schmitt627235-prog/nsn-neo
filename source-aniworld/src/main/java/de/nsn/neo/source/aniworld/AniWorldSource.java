@@ -110,6 +110,10 @@ public final class AniWorldSource extends HtmlSourceProvider {
     private String detailPoster(String detailUrl){
         try{
             Document detail=load(detailUrl);
+            java.util.regex.Matcher cssCover=java.util.regex.Pattern.compile(
+                    "(?is)\\.seriesCoverBox\\s*\\{[^}]*background(?:-image)?\\s*:\\s*url\\(\\s*['\"]?([^)'\"\\s]+)")
+                    .matcher(detail.html());
+            if(cssCover.find())return absolute(cssCover.group(1));
             Element container=detail.selectFirst(
                     "body > div:nth-child(1) > div:nth-child(2) > div:nth-child(1) > section > div:nth-child(2) > div:nth-child(1) > div");
             String poster=containerPoster(container);

@@ -394,18 +394,29 @@ public abstract class HomeActivityBase extends Activity {
 
     private final class RefreshHorizontalScrollView extends HorizontalScrollView{
         private float downX=Float.NaN;
+        private float downY=Float.NaN;
         private Runnable refreshAction;
+        private boolean fired;
         RefreshHorizontalScrollView(Activity context){super(context);}
         void setRefreshAction(Runnable action){refreshAction=action;}
-        @Override public boolean onTouchEvent(MotionEvent event){
-            if(event.getAction()==MotionEvent.ACTION_DOWN)
+        @Override public boolean dispatchTouchEvent(MotionEvent event){
+            if(event.getAction()==MotionEvent.ACTION_DOWN){
                 downX=getScrollX()==0?event.getX():Float.NaN;
-            boolean handled=super.onTouchEvent(event);
+                downY=event.getY();fired=false;
+            }
+            if(event.getAction()==MotionEvent.ACTION_MOVE&&!fired&&!Float.isNaN(downX)){
+                float horizontal=event.getX()-downX;
+                float vertical=Math.abs(event.getY()-downY);
+                if(horizontal>=NsnViews.dp(HomeActivityBase.this,72)&&horizontal>vertical&&refreshAction!=null){
+                    fired=true;refreshAction.run();
+                }
+            }
+            boolean handled=super.dispatchTouchEvent(event);
             if(event.getAction()==MotionEvent.ACTION_UP){
-                if(!Float.isNaN(downX)&&event.getX()-downX>=NsnViews.dp(HomeActivityBase.this,72)
+                if(!fired&&!Float.isNaN(downX)&&event.getX()-downX>=NsnViews.dp(HomeActivityBase.this,72)
                         &&refreshAction!=null)refreshAction.run();
-                downX=Float.NaN;
-            }else if(event.getAction()==MotionEvent.ACTION_CANCEL)downX=Float.NaN;
+                downX=Float.NaN;downY=Float.NaN;
+            }else if(event.getAction()==MotionEvent.ACTION_CANCEL){downX=Float.NaN;downY=Float.NaN;}
             return handled;
         }
     }
