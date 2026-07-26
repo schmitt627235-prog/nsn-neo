@@ -1,8 +1,11 @@
 <resources>
-    <color name="nsn_black">#050505</color>
-    <color name="nsn_panel">#151515</color>
+    <color name="nsn_black">#000000</color>
+    <color name="nsn_surface">#0B0B0B</color>
+    <color name="nsn_panel">#171717</color>
+    <color name="nsn_panel_elevated">#232323</color>
     <color name="nsn_red">#E50914</color>
-    <color name="nsn_text">#F5F5F5</color>
-    <color name="nsn_muted">#B3B3B3</color>
+    <color name="nsn_red_dark">#A90009</color>
+    <color name="nsn_text">#F7F7F7</color>
+    <color name="nsn_muted">#B7B7B7</color>
+    <color name="nsn_divider">#303030</color>
 </resources>
-

@@ -79,15 +79,35 @@ public final class DetailActivity extends Activity {
         FrameLayout trailerLayer = new FrameLayout(this); hero.addView(trailerLayer, new FrameLayout.LayoutParams(-1,-1));
         ImageView backdrop = new ImageView(this); backdrop.setScaleType(ImageView.ScaleType.CENTER_CROP); backdrop.setAlpha(.35f);
         PosterLoader.load(backdrop, item.backdropUrl); hero.addView(backdrop, new FrameLayout.LayoutParams(-1,-1));
+        View shade=new View(this);
+        shade.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{Color.argb(16,0,0,0),Color.argb(72,0,0,0),Color.BLACK}));
+        hero.addView(shade,new FrameLayout.LayoutParams(-1,-1));
+        TextView back=NsnViews.action(this,"‹  Zurück",false,BuildConfig.IS_TV);
+        back.setOnClickListener(v->finish());
+        FrameLayout.LayoutParams backParams=new FrameLayout.LayoutParams(-2,-2,Gravity.TOP|Gravity.START);
+        backParams.leftMargin=NsnViews.dp(this,BuildConfig.IS_TV?34:14);
+        backParams.topMargin=NsnViews.dp(this,BuildConfig.IS_TV?28:14);
+        hero.addView(back,backParams);
         LinearLayout row = new LinearLayout(this); row.setGravity(Gravity.BOTTOM);
         row.setPadding(NsnViews.dp(this, BuildConfig.IS_TV ? 55 : 20), NsnViews.dp(this,20), NsnViews.dp(this,20), NsnViews.dp(this,35));
         ImageView poster = new ImageView(this); poster.setScaleType(ImageView.ScaleType.CENTER_CROP); PosterLoader.load(poster,item.posterUrl);
         row.addView(poster,new LinearLayout.LayoutParams(NsnViews.dp(this,BuildConfig.IS_TV?190:115),NsnViews.dp(this,BuildConfig.IS_TV?285:173)));
         LinearLayout copy = new LinearLayout(this); copy.setOrientation(LinearLayout.VERTICAL); copy.setPadding(NsnViews.dp(this,20),0,0,0);
         TextView title=NsnViews.text(this,item.title,BuildConfig.IS_TV?34:28,Color.WHITE); title.setTypeface(null,android.graphics.Typeface.BOLD); title.setMaxLines(2); copy.addView(title);
+        StringBuilder metadata=new StringBuilder();
+        if(item.year!=null&&!item.year.trim().isEmpty())metadata.append(item.year.trim());
+        if(item.rating!=null&&!item.rating.trim().isEmpty()){if(metadata.length()>0)metadata.append("  •  ");metadata.append(item.rating.trim());}
+        if(item.genres!=null&&!item.genres.isEmpty()){if(metadata.length()>0)metadata.append("  •  ");metadata.append(android.text.TextUtils.join(" · ",item.genres));}
+        if(metadata.length()>0){
+            TextView meta=NsnViews.text(this,metadata.toString(),BuildConfig.IS_TV?16:13,getColor(R.color.nsn_text));
+            meta.setPadding(0,NsnViews.dp(this,8),0,NsnViews.dp(this,8));copy.addView(meta);
+        }
         String cleanDescription=item.description.replaceAll("(?i)\\s*mehr anzeigen\\s*$","").trim();
         TextView description=NsnViews.text(this,cleanDescription,BuildConfig.IS_TV?18:15,getColor(R.color.nsn_muted)); description.setMaxLines(BuildConfig.IS_TV?4:8); copy.addView(description);
-        TextView favorite=option(((NsnApplication)getApplication()).library().isFavorite(item.source,item.id)?"✓ In meiner Liste":"＋ Meine Liste");
+        TextView favorite=NsnViews.action(this,
+                ((NsnApplication)getApplication()).library().isFavorite(item.source,item.id)
+                        ?"✓ In meiner Liste":"＋ Meine Liste",false,BuildConfig.IS_TV);
         favorite.setOnClickListener(v->{boolean added=((NsnApplication)getApplication()).library().toggleFavorite(item);((TextView)v).setText(added?"✓ In meiner Liste":"＋ Meine Liste");});copy.addView(favorite);
         row.addView(copy,new LinearLayout.LayoutParams(0,-2,1)); hero.addView(row,new FrameLayout.LayoutParams(-1,-1));
         content.addView(hero,new LinearLayout.LayoutParams(-1,NsnViews.dp(this,BuildConfig.IS_TV?500:410)));

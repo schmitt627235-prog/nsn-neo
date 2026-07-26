@@ -2,6 +2,7 @@ package de.nsn.neo.ui;
 
 import android.app.Activity;
 import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -89,11 +90,11 @@ public abstract class HomeActivityBase extends Activity {
         ScrollView vertical = new ScrollView(this); vertical.setFillViewport(true); homeScroll = vertical;
         LinearLayout content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL); content.setClipChildren(false);
         homeContent = content;
-        content.setPadding(0,NsnViews.dp(this,isTv()?58:52),0,NsnViews.dp(this,40));
+        content.setPadding(0,NsnViews.dp(this,isTv()?58:50),0,NsnViews.dp(this,isTv()?46:76));
         // Phase 6: keep the Netflix-like hero as the first content block.  It
         // uses the existing NSN artwork only; source data and navigation stay
         // unchanged.  Rows below remain horizontally scrollable.
-        content.addView(createHero(), new LinearLayout.LayoutParams(-1, NsnViews.dp(this, isTv() ? 360 : 270)));
+        content.addView(createHero(), new LinearLayout.LayoutParams(-1, NsnViews.dp(this, isTv() ? 430 : 390)));
         if("Start".equals(activeSection)){
             addContinueWatching(content);
             addFavorites(content);
@@ -117,7 +118,8 @@ public abstract class HomeActivityBase extends Activity {
         }
         vertical.addView(content, new ScrollView.LayoutParams(-1, -2));
         page.addView(vertical, new LinearLayout.LayoutParams(-1, 0, 1)); root.addView(page, new FrameLayout.LayoutParams(-1,-1));
-        FrameLayout.LayoutParams navParams = new FrameLayout.LayoutParams(-1, NsnViews.dp(this, isTv() ? 72 : 60), Gravity.TOP);
+        FrameLayout.LayoutParams navParams = new FrameLayout.LayoutParams(-1, NsnViews.dp(this, isTv() ? 72 : 60),
+                isTv() ? Gravity.TOP : Gravity.BOTTOM);
         root.addView(navigation, navParams);
         brandMark = new ImageView(this); brandMark.setImageResource(R.drawable.nsn_wordmark);
         brandMark.setScaleType(ImageView.ScaleType.CENTER_INSIDE); brandMark.setAlpha(.82f);
@@ -136,11 +138,10 @@ public abstract class HomeActivityBase extends Activity {
             navigation.setVisibility(View.VISIBLE);
             navigation.setAlpha(1f);
         }
-        else vertical.setOnScrollChangeListener((v, x, y, oldX, oldY) -> {
-            boolean hide = y > NsnViews.dp(this, 48);
-            if (!hide) navigation.setVisibility(View.VISIBLE);
-            navigation.animate().alpha(hide ? 0f : 1f).setDuration(140).withEndAction(() -> { if (hide) navigation.setVisibility(View.GONE); }).start();
-        });
+        else {
+            navigation.setVisibility(View.VISIBLE);
+            navigation.setAlpha(1f);
+        }
         setContentView(root); root.setAlpha(0f); root.animate().alpha(1f).setDuration(240).start();
         if (splash != null) splash = null;
         homeVisible=true;
@@ -165,17 +166,23 @@ public abstract class HomeActivityBase extends Activity {
 
     private LinearLayout createNavigation() {
         LinearLayout bar = new LinearLayout(this); bar.setOrientation(LinearLayout.HORIZONTAL);
-        bar.setGravity(Gravity.CENTER_VERTICAL); bar.setPadding(NsnViews.dp(this, 20), 0, NsnViews.dp(this, 20), 0);
-        bar.setBackgroundColor(Color.argb(188, 5, 5, 5));
-        ImageView logo = new ImageView(this); logo.setImageResource(R.drawable.nsn_logo); logo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-        bar.addView(logo, new LinearLayout.LayoutParams(NsnViews.dp(this, isTv() ? 92 : 64), -1));
-        String[] labels = {"Suche", "Start", "Anime", "Serien", "Filme", "Genres"};
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        bar.setPadding(NsnViews.dp(this,isTv()?20:4),0,NsnViews.dp(this,isTv()?20:4),0);
+        bar.setBackgroundColor(Color.argb(isTv()?224:242,3,3,3));
+        if(isTv()){
+            ImageView logo = new ImageView(this); logo.setImageResource(R.drawable.nsn_logo);
+            logo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+            bar.addView(logo,new LinearLayout.LayoutParams(NsnViews.dp(this,92),-1));
+        }
+        String[] labels=isTv()
+                ?new String[]{"Suche","Start","Anime","Serien","Filme","Genres"}
+                :new String[]{"Start","Anime","Serien","Filme","Genres"};
         for (String label : labels) {
             TextView item = NsnViews.text(this, label, isTv() ? 17 : 14, Color.WHITE);
             item.setGravity(Gravity.CENTER); item.setFocusable(isTv()); item.setClickable(true);
             item.setSingleLine(true);
             if(label.equals(activeSection))item.setTextColor(getColor(R.color.nsn_red));
-            int horizontalPadding = isTv() ? 18 : 10;
+            int horizontalPadding = isTv() ? 18 : 4;
             item.setPadding(NsnViews.dp(this, horizontalPadding), 0, NsnViews.dp(this, horizontalPadding), 0);
             if ("Suche".equals(label)) item.setOnClickListener(v -> {
                 pendingFocusKey="nav|Suche";
@@ -183,7 +190,11 @@ public abstract class HomeActivityBase extends Activity {
             });
             if ("Start".equals(label)||"Anime".equals(label)||"Serien".equals(label)||"Filme".equals(label)||"Genres".equals(label)) item.setOnClickListener(v->{activeSection=label;pendingFocusKey="nav|"+label;showHome();});
             if (isTv()) item.setOnFocusChangeListener((v, focused) -> {
-                v.setBackgroundColor(focused ? getColor(R.color.nsn_red) : Color.TRANSPARENT);
+                GradientDrawable background=new GradientDrawable();
+                background.setColor(focused?getColor(R.color.nsn_panel_elevated):Color.TRANSPARENT);
+                background.setStroke(focused?NsnViews.dp(this,2):0,focused?Color.WHITE:Color.TRANSPARENT);
+                background.setCornerRadius(NsnViews.dp(this,4));
+                v.setBackground(background);
                 v.animate().scaleX(focused ? 1.05f : 1f).scaleY(focused ? 1.05f : 1f).setDuration(110).start();
             });
             if(isTv())item.setOnKeyListener((v,key,event)->{
@@ -194,7 +205,8 @@ public abstract class HomeActivityBase extends Activity {
                 return false;
             });
             item.setTag("nav|"+label);
-            bar.addView(item, new LinearLayout.LayoutParams(-2, -1));
+            bar.addView(item,isTv()?new LinearLayout.LayoutParams(-2,-1)
+                    :new LinearLayout.LayoutParams(0,-1,1f));
         }
         return bar;
     }
@@ -208,16 +220,31 @@ public abstract class HomeActivityBase extends Activity {
     }
 
     private View createHero() {
-        FrameLayout hero = new FrameLayout(this); hero.setBackgroundColor(Color.rgb(15, 7, 8));
-        ImageView art = new ImageView(this); art.setImageResource(R.drawable.nsn_banner); art.setScaleType(ImageView.ScaleType.CENTER_CROP); art.setAlpha(0.55f);
+        FrameLayout hero = new FrameLayout(this); hero.setBackgroundColor(Color.BLACK);
+        ImageView art = new ImageView(this); art.setImageResource(R.drawable.nsn_banner); art.setScaleType(ImageView.ScaleType.CENTER_CROP); art.setAlpha(0.72f);
         hero.addView(art, new FrameLayout.LayoutParams(-1, -1));
+        View shade=new View(this);
+        shade.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{Color.argb(12,0,0,0),Color.argb(80,0,0,0),Color.BLACK}));
+        hero.addView(shade,new FrameLayout.LayoutParams(-1,-1));
         LinearLayout copy = new LinearLayout(this); copy.setOrientation(LinearLayout.VERTICAL); copy.setGravity(Gravity.BOTTOM);
-        copy.setPadding(NsnViews.dp(this, isTv() ? 54 : 22), 0, NsnViews.dp(this, 22), NsnViews.dp(this, isTv() ? 24 : 22));
+        copy.setPadding(NsnViews.dp(this,isTv()?54:18),0,NsnViews.dp(this,22),NsnViews.dp(this,isTv()?38:26));
         TextView eyebrow = NsnViews.text(this, "NEXT-STREAMING-NEO", isTv() ? 17 : 14, getColor(R.color.nsn_red));
-        TextView title = NsnViews.text(this, "Anime. Serien. Filme.", isTv() ? 34 : 29, Color.WHITE); title.setTypeface(null, android.graphics.Typeface.BOLD);
-        TextView description = NsnViews.text(this, "Eine native Oberfläche für deine verbundenen Medienquellen.", isTv() ? 20 : 16, getColor(R.color.nsn_muted));
+        TextView title = NsnViews.text(this, "Anime. Serien. Filme.", isTv() ? 42 : 30, Color.WHITE); title.setTypeface(null, android.graphics.Typeface.BOLD);
+        TextView description = NsnViews.text(this, "Deine Inhalte. Deine Liste. Direkt weiterschauen.", isTv() ? 20 : 16, getColor(R.color.nsn_muted));
         description.setTextSize(isTv() ? 17 : 15);
-        copy.addView(eyebrow); copy.addView(title); copy.addView(description); hero.addView(copy, new FrameLayout.LayoutParams(-1, -1));
+        copy.addView(eyebrow); copy.addView(title); copy.addView(description);
+        LinearLayout actions=new LinearLayout(this);actions.setOrientation(LinearLayout.HORIZONTAL);
+        actions.setPadding(0,NsnViews.dp(this,14),0,0);
+        TextView play=NsnViews.action(this,"▶  Inhalte entdecken",true,isTv());
+        play.setOnClickListener(v->{if(homeScroll!=null)homeScroll.smoothScrollTo(0,NsnViews.dp(this,isTv()?360:320));});
+        actions.addView(play);
+        TextView list=NsnViews.action(this,"＋  Meine Liste",false,isTv());
+        list.setOnClickListener(v->{activeSection="Start";showHome();});
+        LinearLayout.LayoutParams listParams=new LinearLayout.LayoutParams(-2,-2);
+        listParams.leftMargin=NsnViews.dp(this,10);actions.addView(list,listParams);
+        copy.addView(actions);
+        hero.addView(copy, new FrameLayout.LayoutParams(-1, -1));
         return hero;
     }
 

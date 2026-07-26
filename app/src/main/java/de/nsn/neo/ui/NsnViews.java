@@ -3,6 +3,7 @@ package de.nsn.neo.ui;
 import android.content.Context;
 import android.app.Activity;
 import android.graphics.Color;
+import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.view.View;
@@ -32,14 +33,17 @@ public final class NsnViews {
         TextView view = new TextView(context);
         view.setText(value); view.setTextSize(sp); view.setTextColor(color);
         view.setFontFeatureSettings("kern");
+        view.setTypeface(Typeface.create("sans-serif", Typeface.NORMAL));
+        view.setIncludeFontPadding(false);
         return view;
     }
 
     public static TextView heading(Context context, String value, boolean tv) {
-        TextView view = text(context, value, tv ? 26 : 22, Color.WHITE);
-        view.setTypeface(null, android.graphics.Typeface.BOLD);
-        // Compact section rhythm on mobile; TV keeps the wider streaming-app spacing.
-        view.setPadding(dp(context, 18), dp(context, tv ? 22 : 14), dp(context, 12), dp(context, tv ? 12 : 8));
+        TextView view = text(context, value, tv ? 24 : 19, Color.WHITE);
+        view.setTypeface(Typeface.create("sans-serif", Typeface.BOLD));
+        view.setLetterSpacing(-0.015f);
+        view.setPadding(dp(context, tv ? 44 : 14), dp(context, tv ? 28 : 20),
+                dp(context, 12), dp(context, tv ? 12 : 10));
         return view;
     }
 
@@ -53,12 +57,12 @@ public final class NsnViews {
         // The card owns one fixed visual box. Rows may provide breathing room for focus
         // scaling, but neighboring posters must never paint into this card's bounds.
         card.setClipChildren(true); card.setClipToPadding(true);
-        int width = dp(context, landscape ? (tv ? 270 : 210) : (tv ? 180 : 132));
-        int posterHeight = dp(context, landscape ? (tv ? 152 : 118) : (tv ? 252 : 186));
-        int inset = dp(context, 4); card.setPadding(inset, inset, inset, inset);
+        int width = dp(context, landscape ? (tv ? 260 : 205) : (tv ? 164 : 108));
+        int posterHeight = dp(context, landscape ? (tv ? 146 : 116) : (tv ? 230 : 158));
+        int inset = dp(context, tv ? 4 : 2); card.setPadding(inset, inset, inset, inset);
         ImageView poster = new ImageView(context);
         poster.setImageResource(R.drawable.nsn_logo); poster.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-        poster.setBackgroundColor(Color.rgb(22,22,22));
+        poster.setBackgroundColor(context.getColor(R.color.nsn_panel));
         card.addView(poster, new LinearLayout.LayoutParams(width, posterHeight));
         if (progress) {
             View track = new View(context); GradientDrawable progressShape = new GradientDrawable();
@@ -66,19 +70,48 @@ public final class NsnViews {
             LinearLayout.LayoutParams progressParams = new LinearLayout.LayoutParams(Math.round(width * .58f), dp(context, 3));
             progressParams.topMargin = dp(context, -3); card.addView(track, progressParams);
         }
-        TextView label = text(context, title, tv ? 16 : 14, Color.WHITE);
-        label.setMaxLines(2); label.setPadding(0, dp(context, 8), 0, 0);
-        card.addView(label, new LinearLayout.LayoutParams(width, dp(context, tv ? 52 : 46)));
+        TextView label = text(context, title, tv ? 15 : 12.5f, Color.WHITE);
+        label.setMaxLines(2); label.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        label.setPadding(dp(context, 2), dp(context, 8), dp(context, 2), 0);
+        card.addView(label, new LinearLayout.LayoutParams(width, dp(context, tv ? 48 : 40)));
         LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(width + inset * 2, -2);
-        cardParams.setMargins(dp(context, 12), dp(context, 8), dp(context, 12), dp(context, 14));
+        cardParams.setMargins(dp(context, tv ? 10 : 5), dp(context, 7),
+                dp(context, tv ? 10 : 5), dp(context, 12));
         card.setLayoutParams(cardParams);
         if (tv) card.setOnFocusChangeListener((v, focused) -> {
-            v.animate().scaleX(focused ? 1.04f : 1f).scaleY(focused ? 1.04f : 1f).translationZ(focused ? dp(context, 12) : 0).setDuration(150).start();
-            GradientDrawable bg = new GradientDrawable(); bg.setColor(focused ? Color.rgb(18,18,18) : Color.TRANSPARENT);
-            bg.setStroke(dp(context, focused ? 4 : 0), context.getColor(R.color.nsn_red));
-            bg.setCornerRadius(dp(context, 10)); v.setBackground(bg);
+            v.animate().scaleX(focused ? 1.075f : 1f).scaleY(focused ? 1.075f : 1f)
+                    .translationZ(focused ? dp(context, 18) : 0).setDuration(140).start();
+            GradientDrawable bg = new GradientDrawable();
+            bg.setColor(focused ? context.getColor(R.color.nsn_panel_elevated) : Color.TRANSPARENT);
+            bg.setStroke(dp(context, focused ? 3 : 0), Color.WHITE);
+            bg.setCornerRadius(dp(context, 6)); v.setBackground(bg);
         });
         return card;
+    }
+
+    public static TextView action(Context context, String label, boolean primary, boolean tv) {
+        TextView button = text(context, label, tv ? 17 : 14,
+                primary ? Color.BLACK : Color.WHITE);
+        button.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        button.setGravity(Gravity.CENTER); button.setClickable(true); button.setFocusable(tv);
+        button.setPadding(dp(context, tv ? 24 : 16), dp(context, tv ? 12 : 10),
+                dp(context, tv ? 24 : 16), dp(context, tv ? 12 : 10));
+        applyActionBackground(context, button, primary, false);
+        button.setOnFocusChangeListener((v, focused) -> {
+            applyActionBackground(context, v, primary, focused);
+            v.animate().scaleX(focused ? 1.055f : 1f).scaleY(focused ? 1.055f : 1f)
+                    .translationZ(focused ? dp(context, 12) : 0).setDuration(110).start();
+        });
+        return button;
+    }
+
+    private static void applyActionBackground(Context context, View view, boolean primary, boolean focused) {
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(primary ? (focused ? Color.rgb(220,220,220) : Color.WHITE)
+                : (focused ? context.getColor(R.color.nsn_red) : Color.argb(205,36,36,36)));
+        bg.setCornerRadius(dp(context, 4));
+        if (focused) bg.setStroke(dp(context, 2), Color.WHITE);
+        view.setBackground(bg);
     }
 
     public static LinearLayout rail(Context context, String[] titles, boolean tv) {
