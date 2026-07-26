@@ -62,7 +62,8 @@ public final class AniWorldSource extends HtmlSourceProvider {
         }
         if(list==null)return List.of();
         Map<String,MediaItem> unique=new LinkedHashMap<>();
-        Map<String,String> detailUrls=new LinkedHashMap<>();
+        Map<String,String> episodeUrls=new LinkedHashMap<>();
+        Map<String,String> seriesUrls=new LinkedHashMap<>();
         for(Element link:list.select("a[href*=/anime/stream/],a[href*='/anime/stream/']")){
             String url=link.absUrl("href");if(url.isBlank())url=absolute(link.attr("href"));
             Element name=link.selectFirst("strong");String title=name==null?cleanText(link.text()):cleanText(name.text());
@@ -73,25 +74,27 @@ public final class AniWorldSource extends HtmlSourceProvider {
             Element tag=link.selectFirst(".listTag");String episode=tag==null?"":cleanText(tag.text());
             String description=(episodeCode.isBlank()?"":episodeCode+" · ")
                     +(episode.isBlank()?"Neueste Episode":"Neueste Episode · "+episode);
-            String detailUrl=url.replaceFirst("/staffel-\\d+.*$","");
+            String detailUrl=seriesUrlFromEpisodeUrl(episodeKey);
             Element image=findCardImage(link);String poster=imageUrl(image);
             if(poster==null)poster=posterCache.get(detailUrl);
             unique.put(episodeKey,new MediaItem(episodeKey,id(),ContentType.ANIME,title,description,poster,poster,detailUrl,List.of(),null,null));
-            detailUrls.put(episodeKey,detailUrl);
+            episodeUrls.put(episodeKey,episodeKey);
+            seriesUrls.put(episodeKey,detailUrl);
             if(unique.size()>=limit)break;
         }
         Map<String,Future<String>> pending=new LinkedHashMap<>();
-        for(Map.Entry<String,String> entry:detailUrls.entrySet()){
+        for(Map.Entry<String,String> entry:seriesUrls.entrySet()){
             MediaItem item=unique.get(entry.getKey());
             if(item.posterUrl==null)pending.computeIfAbsent(entry.getValue(),
-                    key->COVER_EXECUTOR.submit(()->detailPoster(key)));
+                    key->COVER_EXECUTOR.submit(()->latestEpisodePoster(
+                            episodeUrls.get(entry.getKey()),key)));
         }
         List<MediaItem> result=new ArrayList<>();
         for(Map.Entry<String,MediaItem> entry:unique.entrySet()){
             MediaItem item=entry.getValue();String poster=item.posterUrl;
-            Future<String> future=pending.get(detailUrls.get(entry.getKey()));
+            Future<String> future=pending.get(seriesUrls.get(entry.getKey()));
             if(poster==null&&future!=null)try{poster=future.get();}catch(Exception ignored){}
-            if(poster!=null)posterCache.put(detailUrls.get(entry.getKey()),poster);
+            if(poster!=null)posterCache.put(seriesUrls.get(entry.getKey()),poster);
             result.add(new MediaItem(item.id,item.source,item.type,item.title,item.description,
                     poster,poster,item.detailUrl,item.genres,item.year,item.rating,item.trailerUrl));
         }
@@ -109,35 +112,84 @@ public final class AniWorldSource extends HtmlSourceProvider {
             return "";
         }
     }
-    private String detailPoster(String detailUrl){
+    private String latestEpisodePoster(String episodeUrl,String seriesUrl){
+        String cached=posterCache.get(seriesUrl);
+        if(cached!=null)return cached;
+        Document episode=null;
         try{
-            Document detail=load(detailUrl);
-            Element cover=detail.selectFirst(
-                    ".seriesCoverBox > img.loaded, .seriesCoverBox > img[data-src], .seriesCoverBox > img[src]");
-            String poster=aniWorldCoverUrl(cover,detailUrl);
-            if(poster!=null)return poster;
-            java.util.regex.Matcher cssCover=java.util.regex.Pattern.compile(
-                    "(?is)\\.seriesCoverBox\\s*\\{[^}]*background(?:-image)?\\s*:\\s*url\\(\\s*['\"]?([^)'\"\\s]+)")
-                    .matcher(detail.html());
-            if(cssCover.find())return absolute(cssCover.group(1));
-            Element container=detail.selectFirst(
-                    "body > div:nth-child(1) > div:nth-child(2) > div:nth-child(1) > section > div:nth-child(2) > div:nth-child(1) > div");
-            poster=containerPoster(container);
-            if(poster!=null)return poster;
-            cover=detail.selectFirst(
-                    ".seriesCoverBox img, .seriesCover img, .seriesCoverBox noscript img, .seriesCover noscript img, "
-                    +"img[itemprop=image], img[src*=/public/img/cover/], img[data-src*=/public/img/cover/], "
-                    +"img[data-original*=/public/img/cover/], source[srcset*=/public/img/cover/], source[data-srcset*=/public/img/cover/]");
-            poster=imageUrl(cover);
-            if(poster!=null)return poster;
-            Element meta=detail.selectFirst("meta[property=og:image],meta[name=twitter:image]");
-            if(meta!=null&&!meta.attr("content").isBlank())return absolute(meta.attr("content"));
-            poster=aniListPoster(detail);
+            episode=load(episodeUrl);
+            String poster=extractAniWorldPoster(episode,episodeUrl);
             if(poster!=null)return poster;
         }catch(Exception ignored){}
+        Document series=null;
+        if(!episodeUrl.equals(seriesUrl))try{
+            series=load(seriesUrl);
+            String poster=extractAniWorldPoster(series,seriesUrl);
+            if(poster!=null)return poster;
+        }catch(Exception ignored){}
+        return aniListPoster(series!=null?series:episode);
+    }
+    private String extractAniWorldPoster(Document document,String pageUrl){
+        if(document==null)return null;
+        String selectors=".seriesCoverBox img,.seriesCover img,.seriesCoverBox picture img,.seriesCover picture img,"
+                +"img[src*='/public/img/cover/'],img[data-src*='/public/img/cover/'],"
+                +"img[data-original*='/public/img/cover/'],img[data-lazy-src*='/public/img/cover/'],"
+                +"source[srcset*='/public/img/cover/'],source[data-srcset*='/public/img/cover/']";
+        for(Element candidate:document.select(selectors)){
+            String poster=imageUrlFromElement(candidate,pageUrl);
+            if(poster!=null)return poster;
+        }
+        for(Element candidate:document.select("[style*=background-image]")){
+            java.util.regex.Matcher matcher=java.util.regex.Pattern
+                    .compile("(?i)url\\(\\s*['\"]?([^)'\"\\s]+)").matcher(candidate.attr("style"));
+            if(matcher.find()){
+                String poster=validAniWorldPoster(resolvePageUrl(pageUrl,matcher.group(1)));
+                if(poster!=null)return poster;
+            }
+        }
+        Element meta=document.selectFirst("meta[property=og:image],meta[name=twitter:image],link[rel=image_src]");
+        if(meta!=null){
+            String raw=meta.hasAttr("content")?meta.attr("content"):meta.attr("href");
+            String poster=validAniWorldPoster(resolvePageUrl(pageUrl,raw));
+            if(poster!=null)return poster;
+        }
         return null;
     }
+    private String imageUrlFromElement(Element element,String pageUrl){
+        for(String attribute:List.of("data-src","data-original","data-lazy-src","data-url","src")){
+            String raw=element.attr(attribute).trim();
+            if(raw.isBlank())continue;
+            String poster=validAniWorldPoster(resolvePageUrl(pageUrl,raw));
+            if(poster!=null)return poster;
+        }
+        for(String attribute:List.of("data-srcset","srcset")){
+            String value=element.attr(attribute).trim();
+            if(value.isBlank())continue;
+            String[] candidates=value.split(",");
+            for(int i=candidates.length-1;i>=0;i--){
+                String poster=validAniWorldPoster(resolvePageUrl(pageUrl,candidates[i].trim().split("\\s+")[0]));
+                if(poster!=null)return poster;
+            }
+        }
+        return null;
+    }
+    private static String resolvePageUrl(String pageUrl,String value){
+        try{return URI.create(pageUrl).resolve(value.trim()).toString();}
+        catch(Exception ignored){return null;}
+    }
+    private static String validAniWorldPoster(String value){
+        if(value==null||value.isBlank())return null;
+        String lower=value.toLowerCase(java.util.Locale.ROOT);
+        if(lower.startsWith("data:")||lower.endsWith(".svg")||lower.contains("flag")
+                ||lower.contains("avatar")||lower.contains("logo")||lower.contains("hoster"))return null;
+        return lower.contains("/public/img/cover/")
+                ||lower.matches(".*\\.(?:jpe?g|png|webp)(?:[?#].*)?$")?value:null;
+    }
+    private static String seriesUrlFromEpisodeUrl(String episodeUrl){
+        return episodeUrl.replaceFirst("(?i)/staffel-\\d+.*$","").replaceFirst("/+$","");
+    }
     private String aniListPoster(Document detail){
+        if(detail==null)return null;
         java.util.LinkedHashSet<String> titles=new java.util.LinkedHashSet<>();
         Element heading=detail.selectFirst("h1,[itemprop=name]");
         if(heading!=null&&!heading.text().isBlank())titles.add(cleanText(heading.text()));
