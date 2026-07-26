@@ -25,7 +25,9 @@ public final class AniWorldSource extends HtmlSourceProvider {
     public static final SourceMetadata METADATA = new SourceMetadata(
             SourceId.ANIWORLD, "AniWorld", "https://aniworld.to/", ContentType.ANIME, true);
     private static final List<String> DOMAIN_CANDIDATES = List.of("https://aniworld.to/", "https://aniworld.cc/");
-    private static final ExecutorService COVER_EXECUTOR = Executors.newFixedThreadPool(8);
+    // AniWorld throttles bursts of parallel detail-page requests. Two workers keep
+    // the latest rail responsive without turning valid detail pages into failures.
+    private static final ExecutorService COVER_EXECUTOR = Executors.newFixedThreadPool(2);
     private final Map<String,String> posterCache = new ConcurrentHashMap<>();
     private volatile String activeBase = METADATA.baseUrl;
     public AniWorldSource() { super(SourceId.ANIWORLD, METADATA.baseUrl, ContentType.ANIME, true); enableFormLogin(); }
@@ -110,15 +112,19 @@ public final class AniWorldSource extends HtmlSourceProvider {
     private String detailPoster(String detailUrl){
         try{
             Document detail=load(detailUrl);
+            Element cover=detail.selectFirst(
+                    ".seriesCoverBox > img.loaded, .seriesCoverBox > img[data-src], .seriesCoverBox > img[src]");
+            String poster=imageUrl(cover);
+            if(poster!=null)return poster;
             java.util.regex.Matcher cssCover=java.util.regex.Pattern.compile(
                     "(?is)\\.seriesCoverBox\\s*\\{[^}]*background(?:-image)?\\s*:\\s*url\\(\\s*['\"]?([^)'\"\\s]+)")
                     .matcher(detail.html());
             if(cssCover.find())return absolute(cssCover.group(1));
             Element container=detail.selectFirst(
                     "body > div:nth-child(1) > div:nth-child(2) > div:nth-child(1) > section > div:nth-child(2) > div:nth-child(1) > div");
-            String poster=containerPoster(container);
+            poster=containerPoster(container);
             if(poster!=null)return poster;
-            Element cover=detail.selectFirst(
+            cover=detail.selectFirst(
                     ".seriesCoverBox img, .seriesCover img, .seriesCoverBox noscript img, .seriesCover noscript img, "
                     +"img[itemprop=image], img[src*=/public/img/cover/], img[data-src*=/public/img/cover/], "
                     +"img[data-original*=/public/img/cover/], source[srcset*=/public/img/cover/], source[data-srcset*=/public/img/cover/]");
