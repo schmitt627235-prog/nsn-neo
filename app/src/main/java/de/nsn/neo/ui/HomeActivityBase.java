@@ -9,6 +9,7 @@ import android.os.Looper;
 import android.content.Intent;
 import android.view.Gravity;
 import android.view.KeyEvent;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -165,7 +166,7 @@ public abstract class HomeActivityBase extends Activity {
         super.onPause();
     }
 
-    @Override protected void onResume(){super.onResume();NsnViews.applyMobileImmersiveBars(this);if(homeVisible)showHome();}
+    @Override protected void onResume(){super.onResume();NsnViews.applyMobileImmersiveBars(this);}
 
     private LinearLayout createNavigation() {
         LinearLayout bar = new LinearLayout(this); bar.setOrientation(LinearLayout.HORIZONTAL);
@@ -337,11 +338,7 @@ public abstract class HomeActivityBase extends Activity {
                     HorizontalScrollView scroll = new HorizontalScrollView(HomeActivityBase.this);
                     scroll.setHorizontalScrollBarEnabled(false); scroll.setClipChildren(false); scroll.setClipToPadding(false);
                     LinearLayout row = new LinearLayout(HomeActivityBase.this); row.setOrientation(LinearLayout.HORIZONTAL); row.setClipChildren(false);
-                    for (MediaItem item : home.items) {
-                        View card=NsnViews.card(HomeActivityBase.this, item, isTv(), v -> openDetails((MediaItem) v.getTag()));
-                        row.addView(card);
-                        maybeRestoreFocus(card);
-                    }
+                    populateSourceRail(row,scroll,section,provider,home,generation);
                     scroll.addView(row, new HorizontalScrollView.LayoutParams(-2, -2)); section.addView(scroll);
                     if(provider.id()==SourceId.FILMPALAST)section.addView(moviePageControls(section,provider));
                 }
@@ -349,6 +346,58 @@ public abstract class HomeActivityBase extends Activity {
             @Override public void onError(Throwable error) { runOnUiThread(() -> state.setText("Quelle derzeit nicht erreichbar")); }
         };
         if(provider.id()==SourceId.FILMPALAST)provider.homePage(filmpalastPage,homeCallback);else provider.home(homeCallback);
+    }
+
+    private void populateSourceRail(LinearLayout row,HorizontalScrollView scroll,LinearLayout section,
+                                    SourceProvider provider,HomeSection home,int generation){
+        row.removeAllViews();
+        for(MediaItem item:home.items){
+            View card=NsnViews.card(this,item,isTv(),v->openDetails((MediaItem)v.getTag()));
+            row.addView(card);maybeRestoreFocus(card);
+        }
+        if(row.getChildCount()==0)return;
+        View first=row.getChildAt(0);
+        first.setOnKeyListener((view,keyCode,event)->{
+            if(isTv()&&keyCode==KeyEvent.KEYCODE_DPAD_LEFT&&event.getAction()==KeyEvent.ACTION_DOWN
+                    &&scroll.getScrollX()==0){
+                refreshSourceRail(row,scroll,section,provider,home.id,generation);
+                return true;
+            }
+            return false;
+        });
+        if(!isTv()){
+            final float[] downX={Float.NaN};
+            scroll.setOnTouchListener((view,event)->{
+                if(event.getAction()==MotionEvent.ACTION_DOWN)
+                    downX[0]=scroll.getScrollX()==0?event.getX():Float.NaN;
+                else if(event.getAction()==MotionEvent.ACTION_UP){
+                    if(!Float.isNaN(downX[0])&&event.getX()-downX[0]>=NsnViews.dp(this,72))
+                        refreshSourceRail(row,scroll,section,provider,home.id,generation);
+                    downX[0]=Float.NaN;
+                }else if(event.getAction()==MotionEvent.ACTION_CANCEL)downX[0]=Float.NaN;
+                return false;
+            });
+        }
+    }
+
+    private void refreshSourceRail(LinearLayout row,HorizontalScrollView scroll,LinearLayout section,
+                                   SourceProvider provider,String sectionId,int generation){
+        if(row.getAlpha()<1f)return;
+        row.setAlpha(.45f);
+        Callback<List<HomeSection>> callback=new Callback<List<HomeSection>>(){
+            @Override public void onSuccess(List<HomeSection> sections){runOnUiThread(()->{
+                if(generation!=homeGeneration)return;
+                HomeSection replacement=null;
+                for(HomeSection candidate:sections)if(candidate.id.equals(sectionId)){replacement=candidate;break;}
+                if(replacement!=null){
+                    scroll.scrollTo(0,0);
+                    populateSourceRail(row,scroll,section,provider,replacement,generation);
+                }
+                row.setAlpha(1f);
+            });}
+            @Override public void onError(Throwable error){runOnUiThread(()->row.setAlpha(1f));}
+        };
+        if(provider.id()==SourceId.FILMPALAST)provider.homePage(filmpalastPage,callback);else provider.home(callback);
     }
 
     private View moviePageControls(LinearLayout section,SourceProvider provider){

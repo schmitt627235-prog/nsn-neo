@@ -16,11 +16,17 @@ import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.net.URI;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 public final class AniWorldSource extends HtmlSourceProvider {
     public static final SourceMetadata METADATA = new SourceMetadata(
             SourceId.ANIWORLD, "AniWorld", "https://aniworld.to/", ContentType.ANIME, true);
     private static final List<String> DOMAIN_CANDIDATES = List.of("https://aniworld.to/", "https://aniworld.cc/");
+    private static final ExecutorService COVER_EXECUTOR = Executors.newFixedThreadPool(8);
+    private final Map<String,String> posterCache = new ConcurrentHashMap<>();
     private volatile String activeBase = METADATA.baseUrl;
     public AniWorldSource() { super(SourceId.ANIWORLD, METADATA.baseUrl, ContentType.ANIME, true); enableFormLogin(); }
     @Override protected String homeUrl() { return activeBase + "home"; }
@@ -54,7 +60,7 @@ public final class AniWorldSource extends HtmlSourceProvider {
         }
         if(list==null)return List.of();
         Map<String,MediaItem> unique=new LinkedHashMap<>();
-        Map<String,String> posterCache=new LinkedHashMap<>();
+        Map<String,String> detailUrls=new LinkedHashMap<>();
         for(Element link:list.select("a[href*=/anime/stream/],a[href*='/anime/stream/']")){
             String url=link.absUrl("href");if(url.isBlank())url=absolute(link.attr("href"));
             Element name=link.selectFirst("strong");String title=name==null?cleanText(link.text()):cleanText(name.text());
@@ -67,13 +73,27 @@ public final class AniWorldSource extends HtmlSourceProvider {
                     +(episode.isBlank()?"Neueste Episode":"Neueste Episode · "+episode);
             String detailUrl=url.replaceFirst("/staffel-\\d+.*$","");
             Element image=findCardImage(link);String poster=imageUrl(image);
-            if(poster==null&&posterCache.containsKey(detailUrl))poster=posterCache.get(detailUrl);
-            if(poster==null)poster=detailPoster(url);
-            if(poster!=null)posterCache.put(detailUrl,poster);
+            if(poster==null)poster=posterCache.get(detailUrl);
             unique.put(episodeKey,new MediaItem(episodeKey,id(),ContentType.ANIME,title,description,poster,poster,detailUrl,List.of(),null,null));
+            detailUrls.put(episodeKey,detailUrl);
             if(unique.size()>=limit)break;
         }
-        return new ArrayList<>(unique.values());
+        Map<String,Future<String>> pending=new LinkedHashMap<>();
+        for(Map.Entry<String,String> entry:detailUrls.entrySet()){
+            MediaItem item=unique.get(entry.getKey());
+            if(item.posterUrl==null)pending.computeIfAbsent(entry.getValue(),
+                    key->COVER_EXECUTOR.submit(()->detailPoster(key)));
+        }
+        List<MediaItem> result=new ArrayList<>();
+        for(Map.Entry<String,MediaItem> entry:unique.entrySet()){
+            MediaItem item=entry.getValue();String poster=item.posterUrl;
+            Future<String> future=pending.get(detailUrls.get(entry.getKey()));
+            if(poster==null&&future!=null)try{poster=future.get();}catch(Exception ignored){}
+            if(poster!=null)posterCache.put(detailUrls.get(entry.getKey()),poster);
+            result.add(new MediaItem(item.id,item.source,item.type,item.title,item.description,
+                    poster,poster,item.detailUrl,item.genres,item.year,item.rating,item.trailerUrl));
+        }
+        return result;
     }
     private static String episodeCode(String url){
         java.util.regex.Matcher matcher=java.util.regex.Pattern
@@ -91,7 +111,10 @@ public final class AniWorldSource extends HtmlSourceProvider {
         try{
             Document detail=load(detailUrl);
             Element cover=detail.selectFirst(
-                    ".seriesCoverBox img, .seriesCover img, img[itemprop=image], img[src*=/public/img/cover/], img[data-src*=/public/img/cover/]");
+                    "body > div:nth-child(1) > div:nth-child(2) > div:nth-child(1) > section > div:nth-child(2) > div:nth-child(1) > div, "
+                    +".seriesCoverBox, .seriesCover, .seriesCoverBox img, .seriesCover img, .seriesCoverBox noscript img, .seriesCover noscript img, "
+                    +"img[itemprop=image], img[src*=/public/img/cover/], img[data-src*=/public/img/cover/], "
+                    +"img[data-original*=/public/img/cover/], source[srcset*=/public/img/cover/], source[data-srcset*=/public/img/cover/]");
             String poster=imageUrl(cover);
             if(poster!=null)return poster;
             Element meta=detail.selectFirst("meta[property=og:image],meta[name=twitter:image]");

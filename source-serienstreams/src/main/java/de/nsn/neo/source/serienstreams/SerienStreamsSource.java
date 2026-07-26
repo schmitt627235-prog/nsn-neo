@@ -15,10 +15,16 @@ import java.util.List;
 import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 public final class SerienStreamsSource extends HtmlSourceProvider {
     public static final SourceMetadata METADATA = new SourceMetadata(
             SourceId.SERIENSTREAMS, "SerienStreams", "http://186.2.175.5/", ContentType.SERIES, true);
+    private static final ExecutorService COVER_EXECUTOR = Executors.newFixedThreadPool(8);
+    private final Map<String,String> posterCache = new ConcurrentHashMap<>();
     public SerienStreamsSource() { super(SourceId.SERIENSTREAMS, METADATA.baseUrl, ContentType.SERIES, true); enableFormLogin(); }
     @Override protected String contentPathSelector() { return "a[href^=/serie/],a[href*='186.2.175.5/serie/']"; }
     @Override protected boolean accepts(Element link, String title, String url) { return url.contains("/serie/"); }
@@ -73,7 +79,7 @@ public final class SerienStreamsSource extends HtmlSourceProvider {
     });}
     private List<MediaItem> latestEpisodes(Document doc,int limit){
         Map<String,MediaItem> unique=new LinkedHashMap<>();
-        Map<String,String> posterCache=new LinkedHashMap<>();
+        Map<String,String> detailUrls=new LinkedHashMap<>();
         for(Element link:doc.select("a.latest-episode-row[href*=/serie/][href*=staffel-][href*=episode-]")){
             String url=link.absUrl("href");if(url.isBlank())url=absolute(link.attr("href"));
             String key=url.replaceFirst("[?#].*$","").replaceFirst("/+$","");
@@ -90,18 +96,44 @@ public final class SerienStreamsSource extends HtmlSourceProvider {
                 }catch(NumberFormatException ignored){}
                 String detailUrl=key.replaceFirst("/staffel-\\d+.*$","");
                 String poster=posterCache.get(detailUrl);
-                if(poster==null)try{
-                    MediaItem detail=parseDetail(load(detailUrl),detailUrl);
-                    poster=detail.posterUrl;
-                }catch(Exception ignored){}
-                if(poster!=null)posterCache.put(detailUrl,poster);
                 if(!title.isBlank())unique.put(key,new MediaItem(key,id(),ContentType.SERIES,title,
                         code.isBlank()?"Neueste Episode":code+" · Neueste Episode",
                         poster,poster,detailUrl,List.of(),null,null));
+                if(!title.isBlank())detailUrls.put(key,detailUrl);
             }
             if(unique.size()>=limit)break;
         }
-        return new ArrayList<>(unique.values());
+        Map<String,Future<String>> pending=new LinkedHashMap<>();
+        for(Map.Entry<String,String> entry:detailUrls.entrySet()){
+            MediaItem item=unique.get(entry.getKey());
+            if(item.posterUrl==null)pending.computeIfAbsent(entry.getValue(),
+                    value->COVER_EXECUTOR.submit(()->detailPoster(value)));
+        }
+        List<MediaItem> result=new ArrayList<>();
+        for(Map.Entry<String,MediaItem> entry:unique.entrySet()){
+            MediaItem item=entry.getValue();String poster=item.posterUrl;
+            Future<String> future=pending.get(detailUrls.get(entry.getKey()));
+            if(poster==null&&future!=null)try{poster=future.get();}catch(Exception ignored){}
+            if(poster!=null)posterCache.put(detailUrls.get(entry.getKey()),poster);
+            result.add(new MediaItem(item.id,item.source,item.type,item.title,item.description,
+                    poster,poster,item.detailUrl,item.genres,item.year,item.rating,item.trailerUrl));
+        }
+        return result;
+    }
+    private String detailPoster(String detailUrl){
+        try{
+            Document detail=load(detailUrl);
+            Element cover=detail.selectFirst(
+                    "body > div:nth-child(2) > div:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1), "
+                    +".seriesCoverBox, .seriesCover, .series-cover, .detail-cover, "
+                    +"img[itemprop=image], img[data-src*=/files/], img[src*=/files/], "
+                    +"img[data-original], source[data-srcset], source[srcset]");
+            String poster=imageUrl(cover);
+            if(poster!=null)return poster;
+            Element meta=detail.selectFirst("meta[property=og:image],meta[name=twitter:image]");
+            if(meta!=null&&!meta.attr("content").isBlank())return absolute(meta.attr("content"));
+        }catch(Exception ignored){}
+        return null;
     }
     @Override public void search(String query,Callback<List<MediaItem>> callback){async(callback,()->cards(load(METADATA.baseUrl+"suche?term="+java.net.URLEncoder.encode(query,"UTF-8")),100));}
     private static void add(List<HomeSection> target,String id,String title,List<MediaItem> items){if(items!=null&&!items.isEmpty())target.add(new HomeSection(id,title,items));}
