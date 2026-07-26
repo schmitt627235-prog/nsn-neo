@@ -90,15 +90,24 @@ public final class AniWorldSource extends HtmlSourceProvider {
     @Override public void languages(String contentId,String episodeId,Callback<List<String>> callback){async(callback,()->{
         Document doc=load(absolute(episodeId==null?contentId:episodeId));
         java.util.LinkedHashSet<String> result=new java.util.LinkedHashSet<>();
-        for(Element flag:doc.select(".editFunctions img.flag, .changeLanguageBox img.flag, img.flag")){
-            String hint=(flag.attr("title")+" "+flag.attr("alt")+" "+flag.attr("src")).toLowerCase(java.util.Locale.ROOT);
-            if(hint.contains("engl")||hint.contains("english"))result.add("Englisch (Untertitel)");
-            else if(hint.contains("untertitel")||hint.contains("japanese-german"))result.add("Deutsch (Untertitel)");
-            else if(hint.contains("deutsch")||hint.contains("german"))result.add("Deutsch (Synchronisiert)");
-        }
+        for(Element item:doc.select("[data-lang-key]")){String label=aniLanguageLabel(item.attr("data-lang-key"),item);if(!label.isBlank())result.add(label);}
+        if(result.isEmpty())for(Element flag:doc.select(".editFunctions img.flag, .changeLanguageBox img.flag, img.flag")){Element owner=flag.closest("[data-lang-key]");String label=aniLanguageLabel(owner==null?"":owner.attr("data-lang-key"),flag);if(!label.isBlank())result.add(label);}
         if(result.isEmpty())return superLanguages(doc);
         return new ArrayList<>(result);
     });}
+    @Override protected String resolveLanguageKey(Document doc,String language){
+        String wanted=aniLanguageCategory("",new Element(org.jsoup.parser.Tag.valueOf("div"),"").text(language));
+        for(Element item:doc.select("[data-lang-key]"))if(wanted.equals(aniLanguageCategory(item.attr("data-lang-key"),item)))return item.attr("data-lang-key");
+        return super.resolveLanguageKey(doc,language);
+    }
+    private static String aniLanguageCategory(String key,Element element){
+        String hint=(element.attr("title")+" "+element.attr("alt")+" "+element.attr("src")+" "+element.className()+" "+element.text()).toLowerCase(java.util.Locale.ROOT);
+        if(hint.contains("engl")||hint.contains("english")||hint.contains("engsub"))return "en-sub";
+        if(hint.contains("untertitel")||hint.contains("german-sub")||hint.contains("gersub")||hint.contains("japanese-german"))return "de-sub";
+        if(hint.contains("synchron")||hint.contains("dub")||hint.contains("deutsch")||hint.contains("german"))return "dub";
+        if("3".equals(key))return "en-sub";if("2".equals(key))return "de-sub";if("1".equals(key))return "dub";return "";
+    }
+    private static String aniLanguageLabel(String key,Element element){String c=aniLanguageCategory(key,element);if("en-sub".equals(c))return "Englisch (Untertitel)";if("de-sub".equals(c))return "Deutsch (Untertitel)";if("dub".equals(c))return "Deutsch (Synchronisiert)";return "";}
     private List<String> superLanguages(Document doc){
         java.util.LinkedHashSet<String> result=new java.util.LinkedHashSet<>();
         for(Element flag:doc.select("[data-lang-key]")){String key=flag.attr("data-lang-key");if("1".equals(key))result.add("Deutsch (Synchronisiert)");else if("2".equals(key))result.add("Deutsch (Untertitel)");else if("3".equals(key))result.add("Englisch (Untertitel)");}

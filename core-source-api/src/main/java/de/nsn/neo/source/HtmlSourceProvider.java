@@ -82,7 +82,7 @@ public abstract class HtmlSourceProvider implements SourceProvider {
     @Override public void hosters(String contentId, String episodeId, String language, Callback<List<HosterOption>> callback) {
         async(callback, () -> {
             Document doc = load(absolute(episodeId == null ? contentId : episodeId));
-            Map<String,HosterOption> result = new LinkedHashMap<>();String wantedKey=languageKey(language);
+            Map<String,HosterOption> result = new LinkedHashMap<>();String wantedKey=resolveLanguageKey(doc, language);
             for (Element link : doc.select("li[data-lang-key] a[href], [data-lang-key] a[href], a[href*=/redirect/], button.link-box, a.watchEpisode, .hosterSiteVideo, li[data-link-id], [data-link-id]")) {
                 Element parent = link.closest("[data-lang-key]");
                 if (wantedKey != null && parent != null && !wantedKey.equals(parent.attr("data-lang-key"))) continue;
@@ -104,6 +104,7 @@ public abstract class HtmlSourceProvider implements SourceProvider {
         if(hint.contains("german")||hint.contains("deutsch")||"1".equals(key))return "Deutsch (Synchronisiert)";
         String title=cleanText(first(flag.attr("title"),flag.attr("alt")));return title.isBlank()?"Sprache "+key:title;
     }
+    protected String resolveLanguageKey(Document doc,String language){return languageKey(language);}
     private static String languageKey(String language){if(language==null)return null;String lower=language.toLowerCase(java.util.Locale.ROOT);if(lower.contains("synchron"))return "1";if(lower.contains("deutsch")&&lower.contains("untertitel"))return "2";if(lower.contains("englisch"))return "3";return language.matches("\\d+")?language:null;}
     @Override public void resolve(StreamRequest request, Callback<ResolvedStream> callback) {
         callback.onError(new UnsupportedOperationException("Dynamische Streamauflösung wird im Resolver-Modul angebunden"));
