@@ -85,7 +85,7 @@ public abstract class HtmlSourceProvider implements SourceProvider {
             Map<String,HosterOption> result = new LinkedHashMap<>();String wantedKey=resolveLanguageKey(doc, language);
             for (Element link : doc.select("li[data-lang-key] a[href], [data-lang-key] a[href], a[href*=/redirect/], button.link-box, a.watchEpisode, .hosterSiteVideo, li[data-link-id], [data-link-id]")) {
                 Element parent = link.closest("[data-lang-key]");
-                if (wantedKey != null && parent != null && !wantedKey.equals(parent.attr("data-lang-key"))) continue;
+                if (wantedKey != null && (parent == null || !wantedKey.equals(parent.attr("data-lang-key")))) continue;
                 String name = link.selectFirst("h4") != null ? link.selectFirst("h4").text() : link.text();
                 String url = first(link.absUrl("href"),first(link.attr("data-link-target"),first(link.attr("data-url"),link.attr("data-href"))));
                 Element linkIdOwner=link.hasAttr("data-link-id")?link:link.closest("[data-link-id]");

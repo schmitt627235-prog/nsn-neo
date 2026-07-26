@@ -169,7 +169,7 @@ private final Runnable hideControls=()->{if(controls!=null)controls.setVisibilit
             }
         });
         root.addView(resolver,new FrameLayout.LayoutParams(-1,-1));if(controls!=null)controls.bringToFront();
-        String resolverUrl=source==SourceId.ANIWORLD&&episodeId!=null&&!episodeId.isBlank()?episodeId:hoster;
+        String resolverUrl=hoster!=null&&!hoster.isBlank()?hoster:episodeId;
         resolver.loadUrl(resolverUrl,initialHeaders);
     }
 
