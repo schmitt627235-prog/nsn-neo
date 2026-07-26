@@ -43,12 +43,21 @@ public final class FilmpalastSource extends HtmlSourceProvider {
             String url=link.absUrl("href");if(url.isBlank())url=absolute(link.attr("href"));String title=cleanText(titleOf(link));
             if(title.isBlank()){Element img=findCardImage(link);if(img!=null)title=cleanText(img.attr("alt").replaceFirst("(?i)^stream\\s+",""));}
             if(title.isBlank()||!matchesQuery(title,query))continue;Element image=findCardImage(link);String poster=imageUrl(image);
-            if(poster==null){
-                try{MediaItem detail=parseDetail(load(url),url);poster=detail.posterUrl;}catch(Exception ignored){}
-            }
+            if(poster==null||!poster.toLowerCase(java.util.Locale.ROOT).contains("/files/movies/"))poster=moviePoster(url);
             unique.putIfAbsent(url,new MediaItem(url,id(),ContentType.MOVIE,title,"",poster,poster,url,List.of(),null,null));if(unique.size()>=100)break;
         }return new ArrayList<>(unique.values());
     });}
+    private String moviePoster(String url){
+        try{
+            Document detail=load(url);
+            Element image=detail.selectFirst("img[src*=/files/movies/],img[data-src*=/files/movies/],img[data-original*=/files/movies/],source[srcset*=/files/movies/]");
+            String poster=imageUrl(image);
+            if(poster!=null)return poster;
+            Element meta=detail.selectFirst("meta[property=og:image],meta[name=twitter:image]");
+            if(meta!=null&&!meta.attr("content").isBlank())return absolute(meta.attr("content"));
+        }catch(Exception ignored){}
+        return null;
+    }
     private static boolean matchesQuery(String title,String query){
         String hay=org.jsoup.Jsoup.parse(title).text().toLowerCase(java.util.Locale.ROOT);String needle=query.toLowerCase(java.util.Locale.ROOT).trim();
         if(needle.isBlank())return false;for(String word:needle.split("\\s+"))if(!hay.contains(word))return false;return true;

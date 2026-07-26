@@ -54,18 +54,22 @@ public final class AniWorldSource extends HtmlSourceProvider {
         }
         if(list==null)return List.of();
         List<MediaItem> result=new ArrayList<>();int index=0;
+        Map<String,String> posterCache=new LinkedHashMap<>();
         for(Element link:list.select("a[href*=/anime/stream/],a[href*='/anime/stream/']")){
             if(index>=limit)break;
             String url=link.absUrl("href");if(url.isBlank())url=absolute(link.attr("href"));
             Element name=link.selectFirst("strong");String title=name==null?cleanText(link.text()):cleanText(name.text());
             if(title.isBlank()||url.isBlank())continue;
             Element tag=link.selectFirst(".listTag");String episode=tag==null?"":cleanText(tag.text());
-            String description=episode.isBlank()?"Neueste Episode":"Neueste Episode Â· "+episode;
+            String description=episode.isBlank()?"Neueste Episode":"Neueste Episode · "+episode;
+            String detailUrl=url.replaceFirst("/staffel-\\d+.*$","");
             Element image=findCardImage(link);String poster=imageUrl(image);
+            if(poster==null&&posterCache.containsKey(detailUrl))poster=posterCache.get(detailUrl);
             if(poster==null){
-                try{MediaItem detail=parseDetail(load(url),url);poster=detail.posterUrl;}catch(Exception ignored){}
+                try{MediaItem detail=parseDetail(load(detailUrl),detailUrl);poster=detail.posterUrl;}catch(Exception ignored){}
             }
-            result.add(new MediaItem(url+"#latest-"+index++,id(),ContentType.ANIME,title,description,poster,poster,url,List.of(),null,null));
+            if(poster!=null)posterCache.put(detailUrl,poster);
+            result.add(new MediaItem(url+"#latest-"+index++,id(),ContentType.ANIME,title,description,poster,poster,detailUrl,List.of(),null,null));
         }
         return result;
     }
@@ -87,7 +91,7 @@ public final class AniWorldSource extends HtmlSourceProvider {
         org.json.JSONArray data=new org.json.JSONArray(transport.postForm(activeBase+"ajax/search",fields));
         List<MediaItem> result=new ArrayList<>();
         for(int i=0;i<data.length();i++){org.json.JSONObject hit=data.optJSONObject(i);if(hit==null)continue;
-            String title=org.jsoup.Jsoup.parse(hit.optString("title")).text().trim();String url=absolute(hit.optString("link"));if(title.isBlank()||url.isBlank()||url.contains("/staffel-"))continue;
+            String title=org.jsoup.Jsoup.parse(hit.optString("title")).text().trim();String url=absolute(hit.optString("link"));if(title.isBlank()||url.isBlank()||url.contains("/staffel-")||!url.contains("/anime/stream/"))continue;
             String description=org.jsoup.Jsoup.parse(hit.optString("description")).text().trim();
             String poster=searchPoster(hit);
             if(poster==null){

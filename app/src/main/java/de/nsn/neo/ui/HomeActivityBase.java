@@ -337,14 +337,13 @@ public abstract class HomeActivityBase extends Activity {
                     HorizontalScrollView scroll = new HorizontalScrollView(HomeActivityBase.this);
                     scroll.setHorizontalScrollBarEnabled(false); scroll.setClipChildren(false); scroll.setClipToPadding(false);
                     LinearLayout row = new LinearLayout(HomeActivityBase.this); row.setOrientation(LinearLayout.HORIZONTAL); row.setClipChildren(false);
-                    if(provider.id()==SourceId.FILMPALAST&&filmpalastPage>1)row.addView(pageCard("← Vorherige Seite",-1,section,provider));
                     for (MediaItem item : home.items) {
                         View card=NsnViews.card(HomeActivityBase.this, item, isTv(), v -> openDetails((MediaItem) v.getTag()));
                         row.addView(card);
                         maybeRestoreFocus(card);
                     }
-                    if(provider.id()==SourceId.FILMPALAST)row.addView(pageCard("Nächste Seite →",1,section,provider));
                     scroll.addView(row, new HorizontalScrollView.LayoutParams(-2, -2)); section.addView(scroll);
+                    if(provider.id()==SourceId.FILMPALAST)section.addView(moviePageControls(section,provider));
                 }
             }); }
             @Override public void onError(Throwable error) { runOnUiThread(() -> state.setText("Quelle derzeit nicht erreichbar")); }
@@ -352,8 +351,21 @@ public abstract class HomeActivityBase extends Activity {
         if(provider.id()==SourceId.FILMPALAST)provider.homePage(filmpalastPage,homeCallback);else provider.home(homeCallback);
     }
 
-    private View pageCard(String label,int delta,LinearLayout section,SourceProvider provider){
-        LinearLayout card=NsnViews.card(this,label,isTv(),true,false);card.setOnClickListener(v->{filmpalastPage=Math.max(1,filmpalastPage+delta);loadSourceSection(section,provider,homeGeneration);});return card;
+    private View moviePageControls(LinearLayout section,SourceProvider provider){
+        LinearLayout controls=new LinearLayout(this);
+        controls.setOrientation(LinearLayout.HORIZONTAL);
+        controls.setPadding(NsnViews.dp(this,isTv()?44:14),0,0,NsnViews.dp(this,18));
+        if(filmpalastPage>1){
+            TextView previous=NsnViews.action(this,"‹ Vorherige Seite",false,isTv());
+            previous.setOnClickListener(v->{filmpalastPage--;loadSourceSection(section,provider,homeGeneration);});
+            controls.addView(previous);
+        }
+        TextView next=NsnViews.action(this,"Nächste Seite ›",true,isTv());
+        LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(-2,-2);
+        params.leftMargin=NsnViews.dp(this,10);
+        next.setOnClickListener(v->{filmpalastPage++;loadSourceSection(section,provider,homeGeneration);});
+        controls.addView(next,params);
+        return controls;
     }
 
     private void collectGenres(List<HomeSection> sections){

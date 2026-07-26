@@ -17,6 +17,7 @@ import android.widget.TextView;
 import de.nsn.neo.BuildConfig;
 import de.nsn.neo.NsnApplication;
 import de.nsn.neo.model.MediaItem;
+import de.nsn.neo.model.SourceId;
 import de.nsn.neo.source.Callback;
 import de.nsn.neo.source.SourceProvider;
 import java.util.List;
@@ -35,9 +36,10 @@ public final class SearchActivity extends Activity {
     }
     private void schedule(String value){int token=generation.incrementAndGet();handler.removeCallbacksAndMessages(null);handler.postDelayed(()->search(value.trim(),token),280);}
     private void search(String query,int token){results.removeAllViews();if(query.length()<2)return;TextView loading=NsnViews.heading(this,"Suche läuft …",BuildConfig.IS_TV);results.addView(loading);java.util.concurrent.atomic.AtomicInteger pending=new java.util.concurrent.atomic.AtomicInteger(((NsnApplication)getApplication()).sources().all().size());java.util.concurrent.atomic.AtomicInteger found=new java.util.concurrent.atomic.AtomicInteger();for(SourceProvider provider:((NsnApplication)getApplication()).sources().all())provider.search(query,new Callback<List<MediaItem>>(){
-        public void onSuccess(List<MediaItem> items){android.util.Log.i("NSN_SEARCH",provider.id()+" token="+token+" hits="+items.size());runOnUiThread(()->{if(token!=generation.get())return;if(loading.getParent()!=null)results.removeView(loading);if(!items.isEmpty()){found.addAndGet(items.size());TextView heading=NsnViews.heading(SearchActivity.this,provider.id().name(),BuildConfig.IS_TV);results.addView(heading);HorizontalScrollView scroller=new HorizontalScrollView(SearchActivity.this);scroller.setHorizontalScrollBarEnabled(false);LinearLayout row=new LinearLayout(SearchActivity.this);row.setOrientation(LinearLayout.HORIZONTAL);for(MediaItem item:items)row.addView(NsnViews.card(SearchActivity.this,item,BuildConfig.IS_TV,v->open((MediaItem)v.getTag())));scroller.addView(row);results.addView(scroller);}if(pending.decrementAndGet()==0&&found.get()==0)results.addView(NsnViews.heading(SearchActivity.this,"Keine Treffer gefunden",BuildConfig.IS_TV));});}
+        public void onSuccess(List<MediaItem> items){android.util.Log.i("NSN_SEARCH",provider.id()+" token="+token+" hits="+items.size());runOnUiThread(()->{if(token!=generation.get())return;if(loading.getParent()!=null)results.removeView(loading);if(!items.isEmpty()){found.addAndGet(items.size());TextView heading=NsnViews.heading(SearchActivity.this,sourceLabel(provider.id()),BuildConfig.IS_TV);results.addView(heading);HorizontalScrollView scroller=new HorizontalScrollView(SearchActivity.this);scroller.setHorizontalScrollBarEnabled(false);LinearLayout row=new LinearLayout(SearchActivity.this);row.setOrientation(LinearLayout.HORIZONTAL);for(MediaItem item:items)row.addView(NsnViews.card(SearchActivity.this,item,BuildConfig.IS_TV,v->open((MediaItem)v.getTag())));scroller.addView(row);results.addView(scroller);}if(pending.decrementAndGet()==0&&found.get()==0)results.addView(NsnViews.heading(SearchActivity.this,"Keine Treffer gefunden",BuildConfig.IS_TV));});}
         public void onError(Throwable error){android.util.Log.e("NSN_SEARCH",provider.id()+" token="+token+" failed",error);runOnUiThread(()->{if(token!=generation.get())return;if(pending.decrementAndGet()==0&&found.get()==0){if(loading.getParent()!=null)results.removeView(loading);results.addView(NsnViews.heading(SearchActivity.this,"Keine Treffer gefunden",BuildConfig.IS_TV));}});}
     });}
+    private static String sourceLabel(SourceId source){if(source==SourceId.FILMPALAST)return "Filme";if(source==SourceId.SERIENSTREAMS)return "Serien";return "Anime";}
     private void open(MediaItem item){startActivity(NavigationRoutes.detail(this,item));}
     @Override protected void onDestroy(){handler.removeCallbacksAndMessages(null);super.onDestroy();}
 }

@@ -222,7 +222,7 @@ public abstract class HtmlSourceProvider implements SourceProvider {
     }
     protected MediaItem parseDetail(Document doc, String url) {
         Element h1 = doc.selectFirst("h1[itemprop=name], h1");
-        Element image = doc.selectFirst("img[itemprop=image], .seriesCoverBox img, .seriesCover img, img[src*=/media/images/channel/]");
+        Element image = doc.selectFirst("img[itemprop=image], .seriesCoverBox img, .seriesCover img, img[src*=/media/images/channel/], img[src*=/files/movies/], img[data-src*=/files/movies/]");
         Element backdrop = doc.selectFirst("img[src*=/media/images/backdrop/], img[alt=Backdrop]");
         Element description = doc.selectFirst("[itemprop=description], [itemprop=accessibilitySummary], .seri_des, .description, .series-description, .movie-description, .detail-description, p.lead");
         List<String> genres = new ArrayList<>(); for (Element g : doc.select(".genres a, .genre a, a[href*=genre]")) if (!g.text().isBlank() && !genres.contains(g.text())) genres.add(g.text());
