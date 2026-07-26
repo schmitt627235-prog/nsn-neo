@@ -10,6 +10,7 @@ import de.nsn.neo.source.Callback;
 import de.nsn.neo.source.HomeSection;
 import de.nsn.neo.model.MediaItem;
 import de.nsn.neo.model.Episode;
+import de.nsn.neo.model.HosterOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.LinkedHashMap;
@@ -99,6 +100,19 @@ public final class AniWorldSource extends HtmlSourceProvider {
         String wanted=aniLanguageCategory("",new Element(org.jsoup.parser.Tag.valueOf("div"),"").text(language));
         for(Element item:doc.select("[data-lang-key]"))if(wanted.equals(aniLanguageCategory(item.attr("data-lang-key"),item)))return item.attr("data-lang-key");
         return super.resolveLanguageKey(doc,language);
+    }
+    @Override public void hosters(String contentId,String episodeId,String language,Callback<List<HosterOption>> callback){
+        super.hosters(contentId,episodeId,language,new Callback<List<HosterOption>>(){
+            @Override public void onSuccess(List<HosterOption> values){
+                Map<String,HosterOption> usable=new LinkedHashMap<>();
+                for(HosterOption value:values){
+                    if(value==null||value.name==null||value.url==null||value.url.isBlank())continue;
+                    usable.put(value.name.trim().toLowerCase(java.util.Locale.ROOT),value);
+                }
+                callback.onSuccess(new ArrayList<>(usable.values()));
+            }
+            @Override public void onError(Throwable error){callback.onError(error);}
+        });
     }
     private static String aniLanguageCategory(String key,Element element){
         String hint=(element.attr("title")+" "+element.attr("alt")+" "+element.attr("src")+" "+element.className()+" "+element.text()).toLowerCase(java.util.Locale.ROOT);

@@ -151,7 +151,7 @@ public final class DetailActivity extends Activity {
         provider.languages(contentId,episode.id,new Callback<List<String>>(){
             @Override public void onSuccess(List<String> values){runOnUiThread(()->{
                 LinearLayout row=new LinearLayout(DetailActivity.this); row.setOrientation(LinearLayout.HORIZONTAL);
-                for(String value:values){TextView chip=option(value);chip.setOnClickListener(v->showHosters(episode,value));row.addView(chip);} selection.addView(row);
+                for(String value:values){TextView chip=option(value);chip.setOnClickListener(v->showHosters(episode,value));row.addView(chip);} selection.addView(horizontalRail(row));
                 if(!values.isEmpty()){View first=row.getChildAt(0);focusAndReveal(first);if(values.size()==1)showHosters(episode,values.get(0));}
             });}
             @Override public void onError(Throwable error){runOnUiThread(()->showHosters(episode,null));}
@@ -176,17 +176,27 @@ public final class DetailActivity extends Activity {
                     intent.putExtra("title",mediaItem==null?"":mediaItem.title);
                     intent.putExtra("subtitle","S"+episode.season+" · E"+episode.number+(episode.title==null?"":" · "+episode.title));
                     intent.putExtra("poster",mediaItem==null?null:mediaItem.posterUrl); startActivity(intent);
-                });row.addView(chip);}selection.addView(row);selection.requestLayout();if(row.getChildCount()>0)focusAndReveal(row.getChildAt(0));
+                });row.addView(chip);}selection.addView(horizontalRail(row));selection.requestLayout();if(row.getChildCount()>0)focusAndReveal(row.getChildAt(0));
             });}
             @Override public void onError(Throwable error){ }
         });
     }
     private TextView option(String label){
         TextView chip=NsnViews.text(this,label,BuildConfig.IS_TV?20:16,Color.WHITE);chip.setFocusable(BuildConfig.IS_TV);chip.setClickable(true);
+        chip.setSingleLine(true);
         chip.setPadding(NsnViews.dp(this,18),NsnViews.dp(this,14),NsnViews.dp(this,18),NsnViews.dp(this,14));
         LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(-2,-2);params.setMargins(NsnViews.dp(this,8),NsnViews.dp(this,8),NsnViews.dp(this,8),NsnViews.dp(this,8));chip.setLayoutParams(params);
         if(BuildConfig.IS_TV)chip.setOnFocusChangeListener((v,focused)->{GradientDrawable bg=new GradientDrawable();bg.setColor(focused?Color.rgb(28,12,14):Color.rgb(20,20,20));bg.setStroke(NsnViews.dp(this,focused?4:1),focused?getColor(R.color.nsn_red):Color.DKGRAY);bg.setCornerRadius(NsnViews.dp(this,10));v.setBackground(bg);v.animate().scaleX(focused?1.08f:1f).scaleY(focused?1.08f:1f).translationZ(focused?NsnViews.dp(this,12):0).setDuration(120).start();});
         return chip;
+    }
+    private HorizontalScrollView horizontalRail(LinearLayout row){
+        HorizontalScrollView scroll=new HorizontalScrollView(this);
+        scroll.setHorizontalScrollBarEnabled(false);
+        scroll.setFillViewport(false);
+        scroll.setClipToPadding(false);
+        scroll.addView(row,new HorizontalScrollView.LayoutParams(-2,-2));
+        scroll.setLayoutParams(new LinearLayout.LayoutParams(-1,-2));
+        return scroll;
     }
     private void focusAndReveal(View view){
         if(!BuildConfig.IS_TV)return;
