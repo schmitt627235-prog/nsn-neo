@@ -61,7 +61,8 @@ public final class SerienStreamsSource extends HtmlSourceProvider {
     }
     @Override public void home(Callback<List<HomeSection>> callback){async(callback,()->{
         Document doc=load(homeUrl());List<HomeSection> sections=new ArrayList<>();
-        List<MediaItem> latest=sectionCards(doc,"Neue Episoden",50);
+        List<MediaItem> latest=latestEpisodes(doc,50);
+        if(latest.isEmpty())latest=sectionCards(doc,"Neue Episoden",50);
         if(latest.isEmpty())latest=sectionCards(doc,"Neu auf SerienStream",50);
         add(sections,"series-latest","Neueste Serien",latest);
         List<MediaItem> popular=sectionCards(doc,"Die Beliebtesten",40);
@@ -70,6 +71,38 @@ public final class SerienStreamsSource extends HtmlSourceProvider {
         if(sections.isEmpty())sections.add(new HomeSection("series-home","Beliebte Serien",cards(doc,60)));
         return sections;
     });}
+    private List<MediaItem> latestEpisodes(Document doc,int limit){
+        Map<String,MediaItem> unique=new LinkedHashMap<>();
+        Map<String,String> posterCache=new LinkedHashMap<>();
+        for(Element link:doc.select("a.latest-episode-row[href*=/serie/][href*=staffel-][href*=episode-]")){
+            String url=link.absUrl("href");if(url.isBlank())url=absolute(link.attr("href"));
+            String key=url.replaceFirst("[?#].*$","").replaceFirst("/+$","");
+            if(!unique.containsKey(key)){
+                Element named=link.selectFirst(".ep-title-text,.ep-title");
+                String title=named==null?link.attr("title").trim():named.text().trim();
+                java.util.regex.Matcher parts=java.util.regex.Pattern
+                        .compile("/staffel-(\\d+)/episode-(\\d+)",java.util.regex.Pattern.CASE_INSENSITIVE)
+                        .matcher(key);
+                String code="";
+                if(parts.find())try{
+                    code=String.format(java.util.Locale.ROOT,"S%02dE%02d",
+                            Integer.parseInt(parts.group(1)),Integer.parseInt(parts.group(2)));
+                }catch(NumberFormatException ignored){}
+                String detailUrl=key.replaceFirst("/staffel-\\d+.*$","");
+                String poster=posterCache.get(detailUrl);
+                if(poster==null)try{
+                    MediaItem detail=parseDetail(load(detailUrl),detailUrl);
+                    poster=detail.posterUrl;
+                }catch(Exception ignored){}
+                if(poster!=null)posterCache.put(detailUrl,poster);
+                if(!title.isBlank())unique.put(key,new MediaItem(key,id(),ContentType.SERIES,title,
+                        code.isBlank()?"Neueste Episode":code+" · Neueste Episode",
+                        poster,poster,detailUrl,List.of(),null,null));
+            }
+            if(unique.size()>=limit)break;
+        }
+        return new ArrayList<>(unique.values());
+    }
     @Override public void search(String query,Callback<List<MediaItem>> callback){async(callback,()->cards(load(METADATA.baseUrl+"suche?term="+java.net.URLEncoder.encode(query,"UTF-8")),100));}
     private static void add(List<HomeSection> target,String id,String title,List<MediaItem> items){if(items!=null&&!items.isEmpty())target.add(new HomeSection(id,title,items));}
 
