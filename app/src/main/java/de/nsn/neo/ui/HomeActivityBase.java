@@ -26,6 +26,8 @@ import de.nsn.neo.source.SourceProvider;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public abstract class HomeActivityBase extends Activity {
@@ -33,6 +35,15 @@ public abstract class HomeActivityBase extends Activity {
     private LinearLayout navigation;
     private View splash;
     private ImageView brandMark;
+    private ScrollView homeScroll;
+    private LinearLayout homeContent;
+    private LinearLayout genreChipsHost;
+    private LinearLayout genreRowsHost;
+    private View lastContentFocus;
+    private String pendingFocusKey;
+    private String selectedGenre = "Alle";
+    private int homeGeneration;
+    private final Map<String, LinkedHashMap<String, MediaItem>> genreCatalog = new LinkedHashMap<>();
     private boolean homeVisible;
     private String activeSection="Start";
     private int filmpalastPage=1;
@@ -59,6 +70,7 @@ public abstract class HomeActivityBase extends Activity {
     }
 
     private void showHome() {
+        final int generation = ++homeGeneration;
         FrameLayout root = new FrameLayout(this); root.setBackgroundColor(Color.BLACK);
         ImageView fixedBackground = new ImageView(this); fixedBackground.setImageResource(R.drawable.nsn_home_background);
         // Keep the brand texture as a restrained backdrop.  Content cards and
@@ -67,17 +79,33 @@ public abstract class HomeActivityBase extends Activity {
         root.addView(fixedBackground, new FrameLayout.LayoutParams(-1,-1));
         LinearLayout page = new LinearLayout(this); page.setOrientation(LinearLayout.VERTICAL);
         navigation = createNavigation();
-        ScrollView vertical = new ScrollView(this); vertical.setFillViewport(true);
+        ScrollView vertical = new ScrollView(this); vertical.setFillViewport(true); homeScroll = vertical;
         LinearLayout content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL); content.setClipChildren(false);
+        homeContent = content;
         content.setPadding(0,NsnViews.dp(this,isTv()?58:52),0,NsnViews.dp(this,40));
         // Phase 6: keep the Netflix-like hero as the first content block.  It
         // uses the existing NSN artwork only; source data and navigation stay
         // unchanged.  Rows below remain horizontally scrollable.
         content.addView(createHero(), new LinearLayout.LayoutParams(-1, NsnViews.dp(this, isTv() ? 360 : 270)));
-        if("Start".equals(activeSection)){addContinueWatching(content);addFavorites(content);}
-        else if("Meine Liste".equals(activeSection))addFavorites(content);
-        if(!"Meine Liste".equals(activeSection))for(SourceProvider provider:((NsnApplication)getApplication()).sources().all())if(matchesSection(provider.id()))addSourceRail(content,provider);
-        if("Start".equals(activeSection))addCombinedCalendar(content);
+        if("Start".equals(activeSection)){
+            addContinueWatching(content);
+            addFavorites(content);
+            addGenreChips(content);
+        }
+        if("Genres".equals(activeSection)) addGenreBrowser(content);
+        if(!"Genres".equals(activeSection)) {
+            for(SourceProvider provider:((NsnApplication)getApplication()).sources().all())
+                if(matchesSection(provider.id()))addSourceRail(content,provider,generation);
+        } else {
+            loadGenreMetadata(generation);
+        }
+        if("Start".equals(activeSection)){
+            genreRowsHost = new LinearLayout(this);
+            genreRowsHost.setOrientation(LinearLayout.VERTICAL);
+            content.addView(genreRowsHost, new LinearLayout.LayoutParams(-1,-2));
+            renderStartGenreRows();
+            addCombinedCalendar(content);
+        }
         vertical.addView(content, new ScrollView.LayoutParams(-1, -2));
         page.addView(vertical, new LinearLayout.LayoutParams(-1, 0, 1)); root.addView(page, new FrameLayout.LayoutParams(-1,-1));
         FrameLayout.LayoutParams navParams = new FrameLayout.LayoutParams(-1, NsnViews.dp(this, isTv() ? 72 : 60), Gravity.TOP);
@@ -89,12 +117,16 @@ public abstract class HomeActivityBase extends Activity {
         wordmarkParams.topMargin=NsnViews.dp(this,isTv()?8:64);wordmarkParams.rightMargin=NsnViews.dp(this,isTv()?26:12);
         root.addView(brandMark,wordmarkParams);
         TextView quickSearch=NsnViews.text(this,"⌕  Suche",isTv()?19:16,Color.WHITE);quickSearch.setGravity(Gravity.CENTER);
-        quickSearch.setFocusable(isTv());quickSearch.setClickable(true);quickSearch.setPadding(NsnViews.dp(this,16),0,NsnViews.dp(this,16),0);
+        quickSearch.setFocusable(false);quickSearch.setClickable(true);quickSearch.setPadding(NsnViews.dp(this,16),0,NsnViews.dp(this,16),0);
         quickSearch.setBackgroundColor(Color.argb(210,18,18,18));quickSearch.setOnClickListener(v->startActivity(NavigationRoutes.search(this)));
         quickSearch.setOnFocusChangeListener((v,f)->{v.setBackgroundColor(f?getColor(R.color.nsn_red):Color.argb(210,18,18,18));v.animate().scaleX(f?1.06f:1f).scaleY(f?1.06f:1f).setDuration(110).start();});
         FrameLayout.LayoutParams searchParams=new FrameLayout.LayoutParams(NsnViews.dp(this,isTv()?150:112),NsnViews.dp(this,isTv()?48:42),Gravity.TOP|Gravity.START);
-        searchParams.leftMargin=NsnViews.dp(this,isTv()?20:10);searchParams.topMargin=NsnViews.dp(this,isTv()?12:64);root.addView(quickSearch,searchParams);
-        if (isTv()) { navigation.setVisibility(View.GONE); vertical.setOnKeyListener((v, code, event) -> handleTvNavigation(code, event)); }
+        searchParams.leftMargin=NsnViews.dp(this,isTv()?20:10);searchParams.topMargin=NsnViews.dp(this,isTv()?12:64);
+        if(!isTv())root.addView(quickSearch,searchParams);
+        if (isTv()) {
+            navigation.setVisibility(View.VISIBLE);
+            navigation.setAlpha(1f);
+        }
         else vertical.setOnScrollChangeListener((v, x, y, oldX, oldY) -> {
             boolean hide = y > NsnViews.dp(this, 48);
             if (!hide) navigation.setVisibility(View.VISIBLE);
@@ -103,6 +135,21 @@ public abstract class HomeActivityBase extends Activity {
         setContentView(root); root.setAlpha(0f); root.animate().alpha(1f).setDuration(240).start();
         if (splash != null) splash = null;
         homeVisible=true;
+        if(isTv())handler.post(()->{
+            if(pendingFocusKey==null)focusActiveNavigation();
+            else restoreVisibleFocus();
+        });
+    }
+
+    @Override protected void onPause(){
+        if(isTv()) {
+            View focused=getCurrentFocus();
+            if(focused!=null&&!isDescendant(navigation,focused)){
+                lastContentFocus=focused;
+                pendingFocusKey=focusKey(focused);
+            }
+        }
+        super.onPause();
     }
 
     @Override protected void onResume(){super.onResume();NsnViews.applyMobileImmersiveBars(this);if(homeVisible)showHome();}
@@ -113,7 +160,7 @@ public abstract class HomeActivityBase extends Activity {
         bar.setBackgroundColor(Color.argb(188, 5, 5, 5));
         ImageView logo = new ImageView(this); logo.setImageResource(R.drawable.nsn_logo); logo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         bar.addView(logo, new LinearLayout.LayoutParams(NsnViews.dp(this, isTv() ? 92 : 64), -1));
-        String[] labels = {"Suche", "Start", "Anime", "Serien", "Filme", "Meine Liste", "Konten"};
+        String[] labels = {"Suche", "Start", "Anime", "Serien", "Filme", "Genres"};
         for (String label : labels) {
             TextView item = NsnViews.text(this, label, isTv() ? 17 : 14, Color.WHITE);
             item.setGravity(Gravity.CENTER); item.setFocusable(isTv()); item.setClickable(true);
@@ -121,13 +168,23 @@ public abstract class HomeActivityBase extends Activity {
             if(label.equals(activeSection))item.setTextColor(getColor(R.color.nsn_red));
             int horizontalPadding = isTv() ? 18 : 10;
             item.setPadding(NsnViews.dp(this, horizontalPadding), 0, NsnViews.dp(this, horizontalPadding), 0);
-            if ("Konten".equals(label)) item.setOnClickListener(v -> startActivity(NavigationRoutes.accounts(this)));
-            if ("Suche".equals(label)) item.setOnClickListener(v -> startActivity(NavigationRoutes.search(this)));
-            if ("Start".equals(label)||"Anime".equals(label)||"Serien".equals(label)||"Filme".equals(label)||"Meine Liste".equals(label)) item.setOnClickListener(v->{activeSection=label;showHome();});
+            if ("Suche".equals(label)) item.setOnClickListener(v -> {
+                pendingFocusKey="nav|Suche";
+                startActivity(NavigationRoutes.search(this));
+            });
+            if ("Start".equals(label)||"Anime".equals(label)||"Serien".equals(label)||"Filme".equals(label)||"Genres".equals(label)) item.setOnClickListener(v->{activeSection=label;pendingFocusKey="nav|"+label;showHome();});
             if (isTv()) item.setOnFocusChangeListener((v, focused) -> {
                 v.setBackgroundColor(focused ? getColor(R.color.nsn_red) : Color.TRANSPARENT);
                 v.animate().scaleX(focused ? 1.05f : 1f).scaleY(focused ? 1.05f : 1f).setDuration(110).start();
             });
+            if(isTv())item.setOnKeyListener((v,key,event)->{
+                if(event.getAction()==KeyEvent.ACTION_DOWN&&key==KeyEvent.KEYCODE_DPAD_DOWN){
+                    restoreContentFocus();
+                    return true;
+                }
+                return false;
+            });
+            item.setTag("nav|"+label);
             bar.addView(item, new LinearLayout.LayoutParams(-2, -1));
         }
         return bar;
@@ -190,6 +247,7 @@ public abstract class HomeActivityBase extends Activity {
             });
             else card.setOnLongClickListener(v->{showContinueMenu((PlaybackRecord)v.getTag(),v,row);return true;});
             row.addView(card);
+            maybeRestoreFocus(card);
         }
         scroll.addView(row,new HorizontalScrollView.LayoutParams(-2,-2));target.addView(scroll);
     }
@@ -210,26 +268,33 @@ public abstract class HomeActivityBase extends Activity {
         List<MediaItem> items=((NsnApplication)getApplication()).library().favorites();if(items.isEmpty())return;
         target.addView(NsnViews.heading(this,"Meine Liste",isTv()));HorizontalScrollView scroll=new HorizontalScrollView(this);scroll.setHorizontalScrollBarEnabled(false);scroll.setClipChildren(false);
         LinearLayout row=new LinearLayout(this);row.setOrientation(LinearLayout.HORIZONTAL);row.setClipChildren(false);
-        for(MediaItem item:items)row.addView(NsnViews.card(this,item,isTv(),v->openDetails((MediaItem)v.getTag())));scroll.addView(row,new HorizontalScrollView.LayoutParams(-2,-2));target.addView(scroll);
+        for(MediaItem item:items){
+            View card=NsnViews.card(this,item,isTv(),v->openDetails((MediaItem)v.getTag()));
+            row.addView(card);
+            maybeRestoreFocus(card);
+        }
+        scroll.addView(row,new HorizontalScrollView.LayoutParams(-2,-2));target.addView(scroll);
     }
 
     private void resume(PlaybackRecord record){
         startActivity(NavigationRoutes.detail(this, record.source, record.contentId));
     }
 
-    private void addSourceRail(LinearLayout target, SourceProvider provider) {
+    private void addSourceRail(LinearLayout target, SourceProvider provider, int generation) {
         LinearLayout section = new LinearLayout(this); section.setOrientation(LinearLayout.VERTICAL);
         TextView heading = NsnViews.heading(this, provider.id().name(), isTv()); section.addView(heading);
         TextView state = NsnViews.text(this, "Wird geladen …", isTv() ? 17 : 14, getColor(R.color.nsn_muted));
         state.setPadding(NsnViews.dp(this, 20), NsnViews.dp(this, 8), 0, NsnViews.dp(this, 20)); section.addView(state);
         target.addView(section, new LinearLayout.LayoutParams(-1, -2));
-        loadSourceSection(section,provider);
+        loadSourceSection(section,provider,generation);
     }
 
-    private void loadSourceSection(LinearLayout section,SourceProvider provider){
+    private void loadSourceSection(LinearLayout section,SourceProvider provider,int generation){
         section.removeAllViews();TextView state=NsnViews.text(this,"Wird geladen …",isTv()?17:14,getColor(R.color.nsn_muted));state.setPadding(NsnViews.dp(this,20),NsnViews.dp(this,8),0,NsnViews.dp(this,20));section.addView(state);
         Callback<List<HomeSection>> homeCallback=new Callback<List<HomeSection>>() {
             @Override public void onSuccess(List<HomeSection> sections) { runOnUiThread(() -> {
+                if(generation!=homeGeneration)return;
+                collectGenres(sections);
                 section.removeAllViews();
                 if (sections.isEmpty()) { section.addView(NsnViews.heading(HomeActivityBase.this, provider.id().name(), isTv())); return; }
                 for (HomeSection home : sections) {
@@ -238,7 +303,11 @@ public abstract class HomeActivityBase extends Activity {
                     scroll.setHorizontalScrollBarEnabled(false); scroll.setClipChildren(false); scroll.setClipToPadding(false);
                     LinearLayout row = new LinearLayout(HomeActivityBase.this); row.setOrientation(LinearLayout.HORIZONTAL); row.setClipChildren(false);
                     if(provider.id()==SourceId.FILMPALAST&&filmpalastPage>1)row.addView(pageCard("← Vorherige Seite",-1,section,provider));
-                    for (MediaItem item : home.items) row.addView(NsnViews.card(HomeActivityBase.this, item, isTv(), v -> openDetails((MediaItem) v.getTag())));
+                    for (MediaItem item : home.items) {
+                        View card=NsnViews.card(HomeActivityBase.this, item, isTv(), v -> openDetails((MediaItem) v.getTag()));
+                        row.addView(card);
+                        maybeRestoreFocus(card);
+                    }
                     if(provider.id()==SourceId.FILMPALAST)row.addView(pageCard("Nächste Seite →",1,section,provider));
                     scroll.addView(row, new HorizontalScrollView.LayoutParams(-2, -2)); section.addView(scroll);
                 }
@@ -249,7 +318,139 @@ public abstract class HomeActivityBase extends Activity {
     }
 
     private View pageCard(String label,int delta,LinearLayout section,SourceProvider provider){
-        LinearLayout card=NsnViews.card(this,label,isTv(),true,false);card.setOnClickListener(v->{filmpalastPage=Math.max(1,filmpalastPage+delta);loadSourceSection(section,provider);});return card;
+        LinearLayout card=NsnViews.card(this,label,isTv(),true,false);card.setOnClickListener(v->{filmpalastPage=Math.max(1,filmpalastPage+delta);loadSourceSection(section,provider,homeGeneration);});return card;
+    }
+
+    private void collectGenres(List<HomeSection> sections){
+        for(HomeSection section:sections)for(MediaItem item:section.items){
+            for(String raw:item.genres){
+                String genre=raw==null?"":raw.trim();
+                if(genre.isEmpty())continue;
+                genreCatalog.computeIfAbsent(genre,key->new LinkedHashMap<>())
+                        .putIfAbsent(item.source.name()+"|"+item.id,item);
+            }
+        }
+        renderGenreChips();
+        renderStartGenreRows();
+        renderGenreResults();
+    }
+
+    private void loadGenreMetadata(int generation){
+        for(SourceProvider provider:((NsnApplication)getApplication()).sources().all()){
+            Callback<List<HomeSection>> callback=new Callback<List<HomeSection>>(){
+                @Override public void onSuccess(List<HomeSection> sections){
+                    runOnUiThread(()->{
+                        if(generation!=homeGeneration)return;
+                        collectGenres(sections);
+                    });
+                }
+                @Override public void onError(Throwable error){ }
+            };
+            if(provider.id()==SourceId.FILMPALAST)provider.homePage(1,callback);else provider.home(callback);
+        }
+    }
+
+    private void addGenreChips(LinearLayout target){
+        target.addView(NsnViews.heading(this,"Genres entdecken",isTv()));
+        genreChipsHost=new LinearLayout(this);
+        genreChipsHost.setOrientation(LinearLayout.VERTICAL);
+        target.addView(genreChipsHost,new LinearLayout.LayoutParams(-1,-2));
+        renderGenreChips();
+    }
+
+    private void addGenreBrowser(LinearLayout target){
+        target.addView(NsnViews.heading(this,"Genres",isTv()));
+        genreChipsHost=new LinearLayout(this);
+        genreChipsHost.setOrientation(LinearLayout.VERTICAL);
+        target.addView(genreChipsHost,new LinearLayout.LayoutParams(-1,-2));
+        genreRowsHost=new LinearLayout(this);
+        genreRowsHost.setOrientation(LinearLayout.VERTICAL);
+        target.addView(genreRowsHost,new LinearLayout.LayoutParams(-1,-2));
+        renderGenreChips();
+        renderGenreResults();
+    }
+
+    private void renderGenreChips(){
+        if(genreChipsHost==null)return;
+        genreChipsHost.removeAllViews();
+        HorizontalScrollView scroll=new HorizontalScrollView(this);
+        scroll.setHorizontalScrollBarEnabled(false);
+        LinearLayout row=new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        List<String> genres=new ArrayList<>(genreCatalog.keySet());
+        genres.sort(String.CASE_INSENSITIVE_ORDER);
+        if("Genres".equals(activeSection))row.addView(genreChip("Alle"));
+        for(String genre:genres)row.addView(genreChip(genre));
+        scroll.addView(row,new HorizontalScrollView.LayoutParams(-2,-2));
+        genreChipsHost.addView(scroll,new LinearLayout.LayoutParams(-1,-2));
+    }
+
+    private View genreChip(String genre){
+        TextView chip=NsnViews.text(this,genre,isTv()?16:14,Color.WHITE);
+        chip.setGravity(Gravity.CENTER);
+        chip.setSingleLine(true);
+        chip.setFocusable(isTv());
+        chip.setClickable(true);
+        chip.setTag("genre|"+genre);
+        chip.setPadding(NsnViews.dp(this,isTv()?20:14),NsnViews.dp(this,10),
+                NsnViews.dp(this,isTv()?20:14),NsnViews.dp(this,10));
+        boolean selected=genre.equals(selectedGenre);
+        chip.setBackgroundColor(selected?getColor(R.color.nsn_red):Color.argb(220,28,28,28));
+        LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(-2,-2);
+        params.setMargins(NsnViews.dp(this,10),NsnViews.dp(this,6),NsnViews.dp(this,4),NsnViews.dp(this,12));
+        chip.setLayoutParams(params);
+        chip.setOnFocusChangeListener((v,focused)->{
+            boolean active=genre.equals(selectedGenre);
+            v.setBackgroundColor(focused||active?getColor(R.color.nsn_red):Color.argb(220,28,28,28));
+            v.animate().scaleX(focused?1.06f:1f).scaleY(focused?1.06f:1f).setDuration(100).start();
+        });
+        chip.setOnClickListener(v->{
+            selectedGenre=genre;
+            renderGenreChips();
+            renderGenreResults();
+        });
+        maybeRestoreFocus(chip);
+        return chip;
+    }
+
+    private void renderStartGenreRows(){
+        if(genreRowsHost==null||!"Start".equals(activeSection))return;
+        genreRowsHost.removeAllViews();
+        List<String> genres=new ArrayList<>(genreCatalog.keySet());
+        genres.sort(String.CASE_INSENSITIVE_ORDER);
+        for(String genre:genres)addGenreRail(genreRowsHost,genre,new ArrayList<>(genreCatalog.get(genre).values()));
+    }
+
+    private void renderGenreResults(){
+        if(genreRowsHost==null||!"Genres".equals(activeSection))return;
+        genreRowsHost.removeAllViews();
+        if("Alle".equals(selectedGenre)){
+            List<String> genres=new ArrayList<>(genreCatalog.keySet());
+            genres.sort(String.CASE_INSENSITIVE_ORDER);
+            for(String genre:genres)addGenreRail(genreRowsHost,genre,new ArrayList<>(genreCatalog.get(genre).values()));
+            return;
+        }
+        LinkedHashMap<String,MediaItem> items=genreCatalog.get(selectedGenre);
+        if(items!=null)addGenreRail(genreRowsHost,selectedGenre,new ArrayList<>(items.values()));
+    }
+
+    private void addGenreRail(LinearLayout target,String genre,List<MediaItem> items){
+        if(items.isEmpty())return;
+        target.addView(NsnViews.heading(this,genre,isTv()));
+        HorizontalScrollView scroll=new HorizontalScrollView(this);
+        scroll.setHorizontalScrollBarEnabled(false);
+        scroll.setClipChildren(false);
+        scroll.setClipToPadding(false);
+        LinearLayout row=new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setClipChildren(false);
+        for(MediaItem item:items){
+            View card=NsnViews.card(this,item,isTv(),v->openDetails((MediaItem)v.getTag()));
+            row.addView(card);
+            maybeRestoreFocus(card);
+        }
+        scroll.addView(row,new HorizontalScrollView.LayoutParams(-2,-2));
+        target.addView(scroll,new LinearLayout.LayoutParams(-1,-2));
     }
 
     private void addCombinedCalendar(LinearLayout target){
@@ -281,13 +482,118 @@ public abstract class HomeActivityBase extends Activity {
         startActivity(NavigationRoutes.detail(this, item));
     }
 
-    private boolean handleTvNavigation(int keyCode, KeyEvent event) {
-        if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
-        if (keyCode == KeyEvent.KEYCODE_DPAD_UP && navigation.getVisibility() != View.VISIBLE) {
-            navigation.setVisibility(View.VISIBLE); if(brandMark!=null)brandMark.setVisibility(View.GONE); navigation.getChildAt(1).requestFocus(); return true;
+    @Override public boolean dispatchKeyEvent(KeyEvent event){
+        if(isTv()&&event.getAction()==KeyEvent.ACTION_DOWN&&event.getKeyCode()==KeyEvent.KEYCODE_DPAD_UP){
+            View current=getCurrentFocus();
+            if(current!=null&&!isDescendant(navigation,current)){
+                View next=current.focusSearch(View.FOCUS_UP);
+                if(next==null||next==current||isDescendant(navigation,next)
+                        ||(homeScroll!=null&&homeScroll.getScrollY()<=NsnViews.dp(this,16))){
+                    lastContentFocus=current;
+                    pendingFocusKey=focusKey(current);
+                    focusActiveNavigation();
+                    return true;
+                }
+            }
         }
-        if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN && navigation.hasFocus()) {
-            navigation.setVisibility(View.GONE); if(brandMark!=null)brandMark.setVisibility(View.VISIBLE); return false;
+        return super.dispatchKeyEvent(event);
+    }
+
+    private void focusActiveNavigation(){
+        if(navigation==null)return;
+        String wanted="nav|"+activeSection;
+        for(int i=0;i<navigation.getChildCount();i++){
+            View child=navigation.getChildAt(i);
+            if(wanted.equals(child.getTag())){
+                child.requestFocus();
+                return;
+            }
+        }
+        if(navigation.getChildCount()>1)navigation.getChildAt(1).requestFocus();
+    }
+
+    private void restoreContentFocus(){
+        if(lastContentFocus!=null&&lastContentFocus.isAttachedToWindow()
+                &&lastContentFocus.getVisibility()==View.VISIBLE&&lastContentFocus.isFocusable()){
+            lastContentFocus.requestFocus();
+            return;
+        }
+        if(restoreVisibleFocus())return;
+        View first=findFirstFocusable(homeContent);
+        if(first!=null)first.requestFocus();
+    }
+
+    private boolean restoreVisibleFocus(){
+        if(pendingFocusKey==null)return false;
+        View match=findFocusKey(getWindow().getDecorView(),pendingFocusKey);
+        if(match==null)return false;
+        match.requestFocus();
+        lastContentFocus=isDescendant(navigation,match)?lastContentFocus:match;
+        pendingFocusKey=null;
+        return true;
+    }
+
+    private void maybeRestoreFocus(View view){
+        if(!isTv()||pendingFocusKey==null)return;
+        if(pendingFocusKey.equals(focusKey(view))){
+            handler.post(()->{
+                if(view.isAttachedToWindow()){
+                    view.requestFocus();
+                    lastContentFocus=view;
+                    pendingFocusKey=null;
+                }
+            });
+        }
+    }
+
+    private String focusKey(View view){
+        if(view==null)return null;
+        Object tag=view.getTag();
+        if(tag instanceof String)return (String)tag;
+        if(tag instanceof MediaItem){
+            MediaItem item=(MediaItem)tag;
+            return "media|"+item.source.name()+"|"+item.id;
+        }
+        if(tag instanceof PlaybackRecord){
+            PlaybackRecord record=(PlaybackRecord)tag;
+            return "playback|"+record.source.name()+"|"+record.contentId+"|"+record.episodeId;
+        }
+        return null;
+    }
+
+    private View findFocusKey(View view,String key){
+        if(view==null||key==null)return null;
+        if(key.equals(focusKey(view))&&view.isFocusable()&&view.getVisibility()==View.VISIBLE)return view;
+        if(view instanceof ViewGroup){
+            ViewGroup group=(ViewGroup)view;
+            for(int i=0;i<group.getChildCount();i++){
+                View result=findFocusKey(group.getChildAt(i),key);
+                if(result!=null)return result;
+            }
+        }
+        return null;
+    }
+
+    private View findFirstFocusable(View view){
+        if(view==null||view.getVisibility()!=View.VISIBLE)return null;
+        if(view.isFocusable()&&view.isClickable())return view;
+        if(view instanceof ViewGroup){
+            ViewGroup group=(ViewGroup)view;
+            for(int i=0;i<group.getChildCount();i++){
+                View result=findFirstFocusable(group.getChildAt(i));
+                if(result!=null)return result;
+            }
+        }
+        return null;
+    }
+
+    private boolean isDescendant(ViewGroup parent,View child){
+        if(parent==null||child==null)return false;
+        View current=child;
+        while(current!=null){
+            if(current==parent)return true;
+            android.view.ViewParent next=current.getParent();
+            current=next instanceof View?(View)next:null;
         }
         return false;
     }
