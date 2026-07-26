@@ -24,7 +24,12 @@ public final class Media3PlaybackEngine implements PlaybackEngine {
 
     @Override public synchronized void attach(ViewGroup parent, boolean controlsVisible) {
         ensurePlayer(new HashMap<>());
-        if (view == null) view = new PlayerView(parent.getContext());
+        if (view == null) {
+            view = new PlayerView(parent.getContext());
+            view.setBackgroundColor(android.graphics.Color.BLACK);
+            view.setShutterBackgroundColor(android.graphics.Color.BLACK);
+            view.setKeepContentOnPlayerReset(false);
+        }
         if (view.getParent() instanceof ViewGroup) ((ViewGroup) view.getParent()).removeView(view);
         view.setUseController(controlsVisible); view.setPlayer(player);
         parent.addView(view, new ViewGroup.LayoutParams(-1, -1));

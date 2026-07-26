@@ -42,8 +42,8 @@ public final class NativeMediaPlaybackEngine implements PlaybackEngine {
     @Override public synchronized void pause(){if(player!=null&&player.isPlaying())player.pause();}
     @Override public synchronized void play(){if(player!=null)player.start();}
     @Override public synchronized void stop(){releasePlayer();pending=null;currentUrl=null;}
-    @Override public synchronized long positionMs(){return player==null?0:player.getCurrentPosition();}
-    @Override public synchronized long durationMs(){return player==null?0:Math.max(0,player.getDuration());}
+    @Override public synchronized long positionMs(){try{return player==null?0:player.getCurrentPosition();}catch(IllegalStateException ignored){return 0;}}
+    @Override public synchronized long durationMs(){try{return player==null?0:Math.max(0,player.getDuration());}catch(IllegalStateException ignored){return 0;}}
     @Override public synchronized void setOnEndedListener(Runnable listener){onEnded=listener;}
     @Override public synchronized void seekTo(long positionMs){if(player!=null)player.seekTo((int)Math.min(Integer.MAX_VALUE,Math.max(0,positionMs)));}
     @Override public synchronized void setVolume(float volume){if(player!=null)player.setVolume(volume,volume);}

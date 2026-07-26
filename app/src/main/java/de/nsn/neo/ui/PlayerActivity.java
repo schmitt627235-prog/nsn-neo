@@ -4,7 +4,6 @@ import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.graphics.Color;
-import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
@@ -47,6 +46,7 @@ public final class PlayerActivity extends Activity {
     public static final String EXTRA_LANGUAGE = "language", EXTRA_CONTENT = "content", EXTRA_EPISODE = "episode";
     public static final String EXTRA_TITLE = "title", EXTRA_SUBTITLE = "subtitle", EXTRA_POSTER = "poster";
     private FrameLayout root;
+    private FrameLayout playbackLayer;
     private WebView resolver;
     private PlaybackEngine playback;
     private final AtomicBoolean resolved = new AtomicBoolean();
@@ -57,8 +57,11 @@ public final class PlayerActivity extends Activity {
     private boolean keepChosenResume;
     private LinearLayout controls;
     private LinearLayout controlButtons;
+    private LinearLayout topControls;
     private SeekBar timeline;
     private TextView timeLabel;
+    private TextView loadingState;
+    private long loadingDeadline;
     private long webPositionMs,webDurationMs;
     private View webCursor;
     private boolean challengeMode;
@@ -66,11 +69,17 @@ public final class PlayerActivity extends Activity {
     private boolean aniWorldClickPending;
     private float cursorX,cursorY;
     private final Handler uiHandler=new Handler(Looper.getMainLooper());
-private final Runnable hideControls=()->{if(controls!=null)controls.setVisibility(View.GONE);if(controlButtons!=null)controlButtons.setVisibility(View.GONE);};
+private final Runnable hideControls=()->{if(controls!=null)controls.setVisibility(View.GONE);if(controlButtons!=null)controlButtons.setVisibility(View.GONE);if(topControls!=null)topControls.setVisibility(View.GONE);};
     private final Runnable updateProgress=new Runnable(){@Override public void run(){
         if(controls!=null&&resolved.get()){
             long position=playback.positionMs(),duration=playback.durationMs();
-            if(duration>0){timeline.setProgress((int)Math.min(1000,position*1000/Math.max(1,duration)));timeLabel.setText(formatTime(position)+" / "+formatTime(duration));}
+            if(duration>0){
+                timeline.setProgress((int)Math.min(1000,position*1000/Math.max(1,duration)));timeLabel.setText(formatTime(position)+" / "+formatTime(duration));
+                if(loadingState!=null)loadingState.setVisibility(View.GONE);
+            }else if(loadingState!=null&&loadingDeadline>0&&android.os.SystemClock.uptimeMillis()>loadingDeadline){
+                loadingState.setText("Stream konnte nicht gestartet werden.\nBitte einen anderen Hoster wählen.");
+                loadingDeadline=0;
+            }
         }
         uiHandler.postDelayed(this,500);
     }};
@@ -85,7 +94,10 @@ private final Runnable hideControls=()->{if(controls!=null)controls.setVisibilit
         language=getIntent().getStringExtra(EXTRA_LANGUAGE);hosterName=getIntent().getStringExtra(EXTRA_HOSTER_NAME);
         if(source!=null)resumePosition=application.library().resumePosition(source,contentId,episodeId);
         root=new FrameLayout(this); root.setBackgroundColor(Color.BLACK); setContentView(root);
-        playback=application.playback().main(); playback.setOnEndedListener(()->runOnUiThread(this::playNextEpisode)); playback.attach(root,true);
+        root.setOnTouchListener((view,event)->{if(event.getAction()==MotionEvent.ACTION_DOWN)showControls(false);return false;});
+        playbackLayer=new FrameLayout(this);playbackLayer.setBackgroundColor(Color.BLACK);root.addView(playbackLayer,new FrameLayout.LayoutParams(-1,-1));
+        playback=application.playback().main(); playback.setOnEndedListener(()->runOnUiThread(this::playNextEpisode)); playback.attach(playbackLayer,false);
+        addLoadingState();
         addTvControls();showControls(true);uiHandler.post(updateProgress);
         String hoster=getIntent().getStringExtra(EXTRA_HOSTER);
         if(resumePosition>=5_000)showResumeChoice(hoster);else resolveHoster(hoster);
@@ -104,8 +116,9 @@ private final Runnable hideControls=()->{if(controls!=null)controls.setVisibilit
     @SuppressLint("SetJavaScriptEnabled")
     private void resolveHoster(String hoster){
         resolved.set(false);if(!keepChosenResume)resumePosition=source==null?0:application.library().resumePosition(source,contentId,episodeId);keepChosenResume=false;
+        showLoading("Stream wird vorbereitet …",25_000);
         if (isMedia(hoster)) { play(hoster, Map.of()); return; }
-        resolver=new WebView(this); resolver.setBackgroundColor(Color.BLACK); resolver.setAlpha(.01f);
+        resolver=new WebView(this); resolver.setBackgroundColor(Color.BLACK); resolver.setAlpha(0f);
         resolver.setOnTouchListener((view,event)->{if(event.getAction()==MotionEvent.ACTION_DOWN)showControls(false);return false;});
         resolver.setFocusable(false); resolver.setFocusableInTouchMode(false); resolver.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
         WebSettings settings=resolver.getSettings(); settings.setJavaScriptEnabled(true); settings.setDomStorageEnabled(true);
@@ -164,11 +177,11 @@ private final Runnable hideControls=()->{if(controls!=null)controls.setVisibilit
                     uiHandler.postDelayed(()->{if(resolver!=null&&!resolved.get())resolver.evaluateJavascript(clickScript,null);},700);
                     uiHandler.postDelayed(()->{if(resolver!=null&&!resolved.get())resolver.evaluateJavascript(clickScript,null);},1600);
                 }
-                view.evaluateJavascript("(function(){window.open=function(){return null};var sent={};function s(u){if(!u)return;u=String(u).replace(/\\\\\\//g,'/').replace(/&amp;/g,'&');if(!sent[u]&&/(m3u8|mp4|m4v|webm|\\/hls\\/|manifest)/i.test(u)){sent[u]=1;NsnResolver.found(u)}}function scan(){document.querySelectorAll('video,video source').forEach(function(v){v.muted=false;s(v.currentSrc);s(v.src);if(!v.__nsn){v.__nsn=1;setInterval(function(){NsnResolver.state(v.currentTime||0,v.duration||0,!!v.paused)},350)}v.play().catch(function(){})});try{performance.getEntriesByType('resource').forEach(function(e){s(e.name)})}catch(e){}}scan();setInterval(scan,500);setTimeout(function(){var q=['.vjs-big-play-button','.jw-icon-playback','.jw-display-icon-container','.plyr__control--overlaid','button[class*=play]','[aria-label*=Play]','[aria-label*=Abspielen]'];var b=null;for(var i=0;i<q.length&&!b;i++)b=document.querySelector(q[i]);if(!b)b=document.elementFromPoint(innerWidth/2,innerHeight/2);if(b){b.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));if(b.click)b.click()}},900)})()",null);
+                view.evaluateJavascript("(function(){window.open=function(){return null};var sent={};function s(u){if(!u)return;u=String(u).replace(/\\\\\\//g,'/').replace(/&amp;/g,'&');if(!sent[u]&&/(m3u8|mp4|m4v|webm|\\/hls\\/|manifest)/i.test(u)){sent[u]=1;NsnResolver.found(u)}}function scan(){document.querySelectorAll('video,video source').forEach(function(v){v.muted=true;v.volume=0;s(v.currentSrc);s(v.src);if(!v.__nsn){v.__nsn=1;setInterval(function(){NsnResolver.state(v.currentTime||0,v.duration||0,!!v.paused)},350)}v.play().catch(function(){})});try{performance.getEntriesByType('resource').forEach(function(e){s(e.name)})}catch(e){}}scan();setInterval(scan,500);setTimeout(function(){var q=['.vjs-big-play-button','.jw-icon-playback','.jw-display-icon-container','.plyr__control--overlaid','button[class*=play]','[aria-label*=Play]','[aria-label*=Abspielen]'];var b=null;for(var i=0;i<q.length&&!b;i++)b=document.querySelector(q[i]);if(!b)b=document.elementFromPoint(innerWidth/2,innerHeight/2);if(b){b.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));if(b.click)b.click()}},900)})()",null);
                 view.evaluateJavascript("(function(){var t=((document.title||'')+' '+(document.body?document.body.innerText:'')).toLowerCase();if(/recaptcha|captcha|ich bin ein mensch|verify you are human/.test(t))NsnResolver.challenge()})()",null);
             }
         });
-        root.addView(resolver,new FrameLayout.LayoutParams(-1,-1));if(controls!=null)controls.bringToFront();
+        root.addView(resolver,0,new FrameLayout.LayoutParams(-1,-1));playbackLayer.bringToFront();bringPlayerUiToFront();
         String resolverUrl=hoster!=null&&!hoster.isBlank()?hoster:episodeId;
         resolver.loadUrl(resolverUrl,initialHeaders);
     }
@@ -218,6 +231,7 @@ private final Runnable hideControls=()->{if(controls!=null)controls.setVisibilit
         if(!resolved.compareAndSet(false,true))return;
         android.util.Log.i("NSN_STREAM","native handoff: "+url);
         challengeMode=false;if(webCursor!=null){root.removeView(webCursor);webCursor=null;}if(resolver!=null){resolver.stopLoading(); resolver.loadUrl("about:blank"); resolver.destroy(); resolver=null;}
+        showLoading("Video wird geladen …",25_000);
         playback.prepare(new ResolvedStream(url,mime(url),headers,null),resumePosition,true);
         if(controls!=null)showControls(true);
     }
@@ -230,7 +244,7 @@ private final Runnable hideControls=()->{if(controls!=null)controls.setVisibilit
     }
     @Override public boolean dispatchKeyEvent(KeyEvent event){
         if(event.getAction()==KeyEvent.ACTION_DOWN&&controls!=null&&!challengeMode)showControls(false);
-        if(challengeMode&&event.getAction()==KeyEvent.ACTION_DOWN){
+        if(challengeMode&&webCursor!=null&&event.getAction()==KeyEvent.ACTION_DOWN){
             int key=event.getKeyCode();float step=NsnViews.dp(this,26);
             if(key==KeyEvent.KEYCODE_DPAD_LEFT)cursorX-=step;else if(key==KeyEvent.KEYCODE_DPAD_RIGHT)cursorX+=step;else if(key==KeyEvent.KEYCODE_DPAD_UP)cursorY-=step;else if(key==KeyEvent.KEYCODE_DPAD_DOWN)cursorY+=step;else if(key==KeyEvent.KEYCODE_DPAD_CENTER||key==KeyEvent.KEYCODE_ENTER){clickWebCursor();return true;}else return super.dispatchKeyEvent(event);
             moveWebCursor();return true;
@@ -239,12 +253,28 @@ private final Runnable hideControls=()->{if(controls!=null)controls.setVisibilit
         return super.dispatchKeyEvent(event);
     }
 private void showChallenge(){
-    if(resolver==null||challengeMode)return;challengeMode=true;resolver.setAlpha(1f);resolver.setFocusable(true);resolver.setFocusableInTouchMode(true);resolver.requestFocus();if(controls!=null)controls.setVisibility(View.GONE);if(controlButtons!=null)controlButtons.setVisibility(View.GONE);
-        cursorX=root.getWidth()/2f;cursorY=root.getHeight()/2f;webCursor=new View(this);GradientDrawable dot=new GradientDrawable();dot.setShape(GradientDrawable.OVAL);dot.setColor(Color.WHITE);dot.setStroke(NsnViews.dp(this,4),getColor(de.nsn.neo.R.color.nsn_red));webCursor.setBackground(dot);
-        root.addView(webCursor,new FrameLayout.LayoutParams(NsnViews.dp(this,28),NsnViews.dp(this,28)));moveWebCursor();webCursor.bringToFront();
+    if(resolver==null||challengeMode)return;challengeMode=true;
+        showLoading("Der Hoster verlangt eine Browserprüfung.\nBitte einen anderen Hoster wählen.",0);
+        bringPlayerUiToFront();
     }
     private void moveWebCursor(){if(webCursor==null)return;cursorX=Math.max(0,Math.min(root.getWidth()-webCursor.getWidth(),cursorX));cursorY=Math.max(0,Math.min(root.getHeight()-webCursor.getHeight(),cursorY));webCursor.setX(cursorX);webCursor.setY(cursorY);}
     private void clickWebCursor(){if(resolver==null)return;long now=android.os.SystemClock.uptimeMillis();float x=cursorX+NsnViews.dp(this,14),y=cursorY+NsnViews.dp(this,14);resolver.dispatchTouchEvent(MotionEvent.obtain(now,now,MotionEvent.ACTION_DOWN,x,y,0));resolver.dispatchTouchEvent(MotionEvent.obtain(now,now+50,MotionEvent.ACTION_UP,x,y,0));}
+    private void addLoadingState(){
+        loadingState=NsnViews.text(this,"Stream wird vorbereitet …",de.nsn.neo.BuildConfig.IS_TV?18:15,Color.WHITE);
+        loadingState.setGravity(android.view.Gravity.CENTER);loadingState.setBackgroundColor(Color.BLACK);
+        loadingState.setPadding(NsnViews.dp(this,24),NsnViews.dp(this,16),NsnViews.dp(this,24),NsnViews.dp(this,16));
+        root.addView(loadingState,new FrameLayout.LayoutParams(-1,-1));
+    }
+    private void showLoading(String message,long timeoutMs){
+        if(loadingState==null)return;loadingState.setText(message);loadingState.setVisibility(View.VISIBLE);
+        loadingDeadline=timeoutMs>0?android.os.SystemClock.uptimeMillis()+timeoutMs:0;loadingState.bringToFront();
+    }
+    private void bringPlayerUiToFront(){
+        if(loadingState!=null&&loadingState.getVisibility()==View.VISIBLE)loadingState.bringToFront();
+        if(controls!=null)controls.bringToFront();
+        if(controlButtons!=null)controlButtons.bringToFront();
+        if(topControls!=null)topControls.bringToFront();
+    }
     private void addTvControls(){
         controls=new LinearLayout(this);controls.setOrientation(LinearLayout.VERTICAL);controls.setGravity(android.view.Gravity.CENTER);controls.setVisibility(View.INVISIBLE);controls.setPadding(NsnViews.dp(this,de.nsn.neo.BuildConfig.IS_TV?20:8),NsnViews.dp(this,de.nsn.neo.BuildConfig.IS_TV?4:3),NsnViews.dp(this,de.nsn.neo.BuildConfig.IS_TV?20:8),NsnViews.dp(this,de.nsn.neo.BuildConfig.IS_TV?4:3));controls.setBackgroundColor(Color.argb(de.nsn.neo.BuildConfig.IS_TV?55:75,0,0,0));
         LinearLayout progressRow=new LinearLayout(this);progressRow.setGravity(android.view.Gravity.CENTER_VERTICAL);timeLabel=NsnViews.text(this,"00:00:00 / 00:00:00",de.nsn.neo.BuildConfig.IS_TV?16:13,Color.WHITE);progressRow.addView(timeLabel);timeline=new SeekBar(this);timeline.setMax(1000);timeline.getProgressDrawable().setTint(getColor(de.nsn.neo.R.color.nsn_red));timeline.getThumb().setTint(getColor(de.nsn.neo.R.color.nsn_red));timeline.setFocusable(true);timeline.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){public void onProgressChanged(SeekBar bar,int value,boolean user){if(user){long duration=resolved.get()?playback.durationMs():webDurationMs;seekAbsolute(duration*value/1000);}}public void onStartTrackingTouch(SeekBar b){}public void onStopTrackingTouch(SeekBar b){}});LinearLayout.LayoutParams timelineParams=de.nsn.neo.BuildConfig.IS_TV?new LinearLayout.LayoutParams(NsnViews.dp(this,700),-2):new LinearLayout.LayoutParams(0,-2,1f);progressRow.addView(timeline,timelineParams);
@@ -257,11 +287,17 @@ private void showChallenge(){
         addSecondaryControl(secondaryButtons,"\u25B6  N\u00e4chste Folge",this::playNextEpisode);
         FrameLayout.LayoutParams p=new FrameLayout.LayoutParams(-1,-2,android.view.Gravity.BOTTOM);root.addView(controls,p);
         FrameLayout.LayoutParams center=new FrameLayout.LayoutParams(de.nsn.neo.BuildConfig.IS_TV?NsnViews.dp(this,620):-1,-2,android.view.Gravity.CENTER);center.leftMargin=NsnViews.dp(this,de.nsn.neo.BuildConfig.IS_TV?80:16);center.rightMargin=center.leftMargin;root.addView(controlButtons,center);controlButtons.setVisibility(View.INVISIBLE);
+        if(!de.nsn.neo.BuildConfig.IS_TV){
+            topControls=new LinearLayout(this);topControls.setGravity(android.view.Gravity.START|android.view.Gravity.CENTER_VERTICAL);
+            TextView back=NsnViews.text(this,"\u2190",30,Color.WHITE);back.setContentDescription("Zurück zu Staffeln und Episoden");back.setGravity(android.view.Gravity.CENTER);back.setClickable(true);back.setFocusable(true);back.setPadding(NsnViews.dp(this,14),NsnViews.dp(this,8),NsnViews.dp(this,18),NsnViews.dp(this,8));back.setBackgroundColor(Color.argb(75,0,0,0));back.setOnClickListener(v->{savePosition();finish();});
+            topControls.addView(back,new LinearLayout.LayoutParams(-2,-2));
+            FrameLayout.LayoutParams top=new FrameLayout.LayoutParams(-1,-2,android.view.Gravity.TOP|android.view.Gravity.START);top.setMargins(NsnViews.dp(this,8),NsnViews.dp(this,8),NsnViews.dp(this,8),0);root.addView(topControls,top);topControls.setVisibility(View.INVISIBLE);
+        }
     }
     private void addControl(String label,Runnable action){TextView button=NsnViews.text(this,label,de.nsn.neo.BuildConfig.IS_TV?16:13,Color.WHITE);button.setFocusable(true);button.setClickable(true);button.setGravity(android.view.Gravity.CENTER);button.setSingleLine(true);button.setPadding(NsnViews.dp(this,de.nsn.neo.BuildConfig.IS_TV?12:7),NsnViews.dp(this,de.nsn.neo.BuildConfig.IS_TV?6:4),NsnViews.dp(this,de.nsn.neo.BuildConfig.IS_TV?12:7),NsnViews.dp(this,de.nsn.neo.BuildConfig.IS_TV?6:4));button.setBackgroundColor(Color.argb(de.nsn.neo.BuildConfig.IS_TV?105:155,32,32,32));button.setOnFocusChangeListener((v,f)->{v.setBackgroundColor(f?Color.rgb(235,0,35):Color.argb(de.nsn.neo.BuildConfig.IS_TV?105:155,32,32,32));v.animate().scaleX(f?1.04f:1f).scaleY(f?1.04f:1f).setDuration(100).start();});button.setOnClickListener(v->action.run());LinearLayout.LayoutParams lp=de.nsn.neo.BuildConfig.IS_TV?new LinearLayout.LayoutParams(0,-2,1f):new LinearLayout.LayoutParams(0,-2,1f);lp.setMargins(NsnViews.dp(this,2),0,NsnViews.dp(this,2),0);controlButtons.addView(button,lp);}
     private void addSecondaryControl(LinearLayout target,String label,Runnable action){TextView button=NsnViews.text(this,label,de.nsn.neo.BuildConfig.IS_TV?13:12,Color.WHITE);button.setFocusable(true);button.setClickable(true);button.setGravity(android.view.Gravity.CENTER);button.setSingleLine(true);button.setPadding(NsnViews.dp(this,12),NsnViews.dp(this,3),NsnViews.dp(this,12),NsnViews.dp(this,3));button.setBackgroundColor(Color.argb(115,32,32,32));button.setOnFocusChangeListener((v,f)->v.setBackgroundColor(f?Color.rgb(235,0,35):Color.argb(115,32,32,32)));button.setOnClickListener(v->action.run());LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-2,-2);lp.setMargins(NsnViews.dp(this,2),0,NsnViews.dp(this,2),0);target.addView(button,lp);}
-    private void showControls(boolean focusPlay){if(controls==null)return;controls.setVisibility(View.VISIBLE);controls.bringToFront();if(controlButtons!=null){controlButtons.setVisibility(View.VISIBLE);controlButtons.bringToFront();}if(focusPlay&&controlButtons!=null&&!controlButtons.hasFocus()&&controlButtons.getChildCount()>1)controlButtons.getChildAt(1).requestFocus();uiHandler.removeCallbacks(hideControls);uiHandler.postDelayed(hideControls,1800);}
-    private void updateWebState(double position,double duration,boolean paused){if(resolved.get()||duration<=0)return;webPositionMs=(long)(position*1000);webDurationMs=(long)(duration*1000);resolver.setAlpha(1f);if(controls!=null){if(controls.getVisibility()!=View.VISIBLE)showControls(false);timeline.setProgress((int)Math.min(1000,webPositionMs*1000/Math.max(1,webDurationMs)));timeLabel.setText(formatTime(webPositionMs)+" / "+formatTime(webDurationMs));}}
+    private void showControls(boolean focusPlay){if(controls==null)return;controls.setVisibility(View.VISIBLE);bringPlayerUiToFront();if(controlButtons!=null)controlButtons.setVisibility(View.VISIBLE);if(topControls!=null)topControls.setVisibility(View.VISIBLE);if(focusPlay&&controlButtons!=null&&!controlButtons.hasFocus()&&controlButtons.getChildCount()>1)controlButtons.getChildAt(1).requestFocus();uiHandler.removeCallbacks(hideControls);uiHandler.postDelayed(hideControls,1800);}
+    private void updateWebState(double position,double duration,boolean paused){if(resolved.get()||duration<=0)return;webPositionMs=(long)(position*1000);webDurationMs=(long)(duration*1000);}
     private void seekRelative(long delta){long base=resolved.get()?playback.positionMs():webPositionMs;seekAbsolute(base+delta);}
     private void seekAbsolute(long position){long target=Math.max(0,position);if(resolved.get())playback.seekTo(target);else if(resolver!=null)resolver.evaluateJavascript("document.querySelectorAll('video').forEach(function(v){v.currentTime="+(target/1000d)+"})",null);}
     private void togglePlayback(){if(resolved.get()){if(playback.isPlaying())playback.pause();else playback.play();}else if(resolver!=null)resolver.evaluateJavascript("document.querySelectorAll('video').forEach(function(v){if(v.paused)v.play();else v.pause()})",null);}
