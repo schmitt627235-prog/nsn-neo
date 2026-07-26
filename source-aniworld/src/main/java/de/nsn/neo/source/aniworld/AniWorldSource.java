@@ -110,16 +110,27 @@ public final class AniWorldSource extends HtmlSourceProvider {
     private String detailPoster(String detailUrl){
         try{
             Document detail=load(detailUrl);
+            Element container=detail.selectFirst(
+                    "body > div:nth-child(1) > div:nth-child(2) > div:nth-child(1) > section > div:nth-child(2) > div:nth-child(1) > div");
+            String poster=containerPoster(container);
+            if(poster!=null)return poster;
             Element cover=detail.selectFirst(
-                    "body > div:nth-child(1) > div:nth-child(2) > div:nth-child(1) > section > div:nth-child(2) > div:nth-child(1) > div, "
-                    +".seriesCoverBox, .seriesCover, .seriesCoverBox img, .seriesCover img, .seriesCoverBox noscript img, .seriesCover noscript img, "
+                    ".seriesCoverBox img, .seriesCover img, .seriesCoverBox noscript img, .seriesCover noscript img, "
                     +"img[itemprop=image], img[src*=/public/img/cover/], img[data-src*=/public/img/cover/], "
                     +"img[data-original*=/public/img/cover/], source[srcset*=/public/img/cover/], source[data-srcset*=/public/img/cover/]");
-            String poster=imageUrl(cover);
+            poster=imageUrl(cover);
             if(poster!=null)return poster;
             Element meta=detail.selectFirst("meta[property=og:image],meta[name=twitter:image]");
             if(meta!=null&&!meta.attr("content").isBlank())return absolute(meta.attr("content"));
         }catch(Exception ignored){}
+        return null;
+    }
+    private String containerPoster(Element container){
+        if(container==null)return null;
+        String poster=imageUrl(container);if(poster!=null)return poster;
+        for(Element child:container.select("img[data-original],img[data-src],img[src],source[data-srcset],source[srcset],[style*=background-image]")){
+            poster=imageUrl(child);if(poster!=null)return poster;
+        }
         return null;
     }
     private static void add(List<HomeSection> target,String id,String title,List<MediaItem> items){if(items!=null&&!items.isEmpty())target.add(new HomeSection(id,title,items));}

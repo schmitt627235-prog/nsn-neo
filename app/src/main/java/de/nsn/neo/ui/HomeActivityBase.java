@@ -335,7 +335,9 @@ public abstract class HomeActivityBase extends Activity {
                 if (sections.isEmpty()) { section.addView(NsnViews.heading(HomeActivityBase.this, provider.id().name(), isTv())); return; }
                 for (HomeSection home : sections) {
                     section.addView(NsnViews.heading(HomeActivityBase.this, home.title, isTv()));
-                    HorizontalScrollView scroll = new HorizontalScrollView(HomeActivityBase.this);
+                    HorizontalScrollView scroll = isTv()
+                            ? new HorizontalScrollView(HomeActivityBase.this)
+                            : new RefreshHorizontalScrollView(HomeActivityBase.this);
                     scroll.setHorizontalScrollBarEnabled(false); scroll.setClipChildren(false); scroll.setClipToPadding(false);
                     LinearLayout row = new LinearLayout(HomeActivityBase.this); row.setOrientation(LinearLayout.HORIZONTAL); row.setClipChildren(false);
                     populateSourceRail(row,scroll,section,provider,home,generation);
@@ -365,19 +367,9 @@ public abstract class HomeActivityBase extends Activity {
             }
             return false;
         });
-        if(!isTv()){
-            final float[] downX={Float.NaN};
-            scroll.setOnTouchListener((view,event)->{
-                if(event.getAction()==MotionEvent.ACTION_DOWN)
-                    downX[0]=scroll.getScrollX()==0?event.getX():Float.NaN;
-                else if(event.getAction()==MotionEvent.ACTION_UP){
-                    if(!Float.isNaN(downX[0])&&event.getX()-downX[0]>=NsnViews.dp(this,72))
-                        refreshSourceRail(row,scroll,section,provider,home.id,generation);
-                    downX[0]=Float.NaN;
-                }else if(event.getAction()==MotionEvent.ACTION_CANCEL)downX[0]=Float.NaN;
-                return false;
-            });
-        }
+        if(scroll instanceof RefreshHorizontalScrollView)
+            ((RefreshHorizontalScrollView)scroll).setRefreshAction(
+                    ()->refreshSourceRail(row,scroll,section,provider,home.id,generation));
     }
 
     private void refreshSourceRail(LinearLayout row,HorizontalScrollView scroll,LinearLayout section,
@@ -398,6 +390,24 @@ public abstract class HomeActivityBase extends Activity {
             @Override public void onError(Throwable error){runOnUiThread(()->row.setAlpha(1f));}
         };
         if(provider.id()==SourceId.FILMPALAST)provider.homePage(filmpalastPage,callback);else provider.home(callback);
+    }
+
+    private final class RefreshHorizontalScrollView extends HorizontalScrollView{
+        private float downX=Float.NaN;
+        private Runnable refreshAction;
+        RefreshHorizontalScrollView(Activity context){super(context);}
+        void setRefreshAction(Runnable action){refreshAction=action;}
+        @Override public boolean onTouchEvent(MotionEvent event){
+            if(event.getAction()==MotionEvent.ACTION_DOWN)
+                downX=getScrollX()==0?event.getX():Float.NaN;
+            boolean handled=super.onTouchEvent(event);
+            if(event.getAction()==MotionEvent.ACTION_UP){
+                if(!Float.isNaN(downX)&&event.getX()-downX>=NsnViews.dp(HomeActivityBase.this,72)
+                        &&refreshAction!=null)refreshAction.run();
+                downX=Float.NaN;
+            }else if(event.getAction()==MotionEvent.ACTION_CANCEL)downX=Float.NaN;
+            return handled;
+        }
     }
 
     private View moviePageControls(LinearLayout section,SourceProvider provider){

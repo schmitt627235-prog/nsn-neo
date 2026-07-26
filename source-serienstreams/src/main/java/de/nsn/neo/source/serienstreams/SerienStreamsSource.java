@@ -70,7 +70,7 @@ public final class SerienStreamsSource extends HtmlSourceProvider {
         List<MediaItem> latest=latestEpisodes(doc,50);
         if(latest.isEmpty())latest=sectionCards(doc,"Neue Episoden",50);
         if(latest.isEmpty())latest=sectionCards(doc,"Neu auf SerienStream",50);
-        add(sections,"series-latest","Neueste Serien",latest);
+        add(sections,"series-latest","Die neuesten Serien-Episoden",latest);
         List<MediaItem> popular=sectionCards(doc,"Die Beliebtesten",40);
         if(popular.isEmpty())popular=sectionCards(doc,"Aktuell beliebt",40);
         add(sections,"series-popular","Beliebte Serien",popular);
@@ -123,16 +123,27 @@ public final class SerienStreamsSource extends HtmlSourceProvider {
     private String detailPoster(String detailUrl){
         try{
             Document detail=load(detailUrl);
+            Element container=detail.selectFirst(
+                    "body > div:nth-child(2) > div:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1)");
+            String poster=containerPoster(container);
+            if(poster!=null)return poster;
             Element cover=detail.selectFirst(
-                    "body > div:nth-child(2) > div:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1), "
-                    +".seriesCoverBox, .seriesCover, .series-cover, .detail-cover, "
+                    ".seriesCoverBox img, .seriesCover img, .series-cover img, .detail-cover img, "
                     +"img[itemprop=image], img[data-src*=/files/], img[src*=/files/], "
                     +"img[data-original], source[data-srcset], source[srcset]");
-            String poster=imageUrl(cover);
+            poster=imageUrl(cover);
             if(poster!=null)return poster;
             Element meta=detail.selectFirst("meta[property=og:image],meta[name=twitter:image]");
             if(meta!=null&&!meta.attr("content").isBlank())return absolute(meta.attr("content"));
         }catch(Exception ignored){}
+        return null;
+    }
+    private String containerPoster(Element container){
+        if(container==null)return null;
+        String poster=imageUrl(container);if(poster!=null)return poster;
+        for(Element child:container.select("img[data-original],img[data-src],img[src],source[data-srcset],source[srcset],[style*=background-image]")){
+            poster=imageUrl(child);if(poster!=null)return poster;
+        }
         return null;
     }
     @Override public void search(String query,Callback<List<MediaItem>> callback){async(callback,()->cards(load(METADATA.baseUrl+"suche?term="+java.net.URLEncoder.encode(query,"UTF-8")),100));}
