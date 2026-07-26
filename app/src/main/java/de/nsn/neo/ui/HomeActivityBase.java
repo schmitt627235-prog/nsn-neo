@@ -21,13 +21,17 @@ import de.nsn.neo.model.MediaItem;
 import de.nsn.neo.model.SourceId;
 import de.nsn.neo.data.PlaybackRecord;
 import de.nsn.neo.source.Callback;
+import de.nsn.neo.source.GenreLink;
 import de.nsn.neo.source.HomeSection;
 import de.nsn.neo.source.SourceProvider;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public abstract class HomeActivityBase extends Activity {
@@ -42,8 +46,12 @@ public abstract class HomeActivityBase extends Activity {
     private View lastContentFocus;
     private String pendingFocusKey;
     private String selectedGenre = "Alle";
+    private GenreLink selectedGenreLink;
     private int homeGeneration;
     private final Map<String, LinkedHashMap<String, MediaItem>> genreCatalog = new LinkedHashMap<>();
+    private final Map<SourceId,List<GenreLink>> sourceGenres = new LinkedHashMap<>();
+    private final Map<String,List<MediaItem>> genreResults = new HashMap<>();
+    private final Set<String> loadingGenres = new HashSet<>();
     private boolean homeVisible;
     private String activeSection="Start";
     private int filmpalastPage=1;
@@ -90,21 +98,23 @@ public abstract class HomeActivityBase extends Activity {
         if("Start".equals(activeSection)){
             addContinueWatching(content);
             addFavorites(content);
-            addGenreChips(content);
         }
         if("Genres".equals(activeSection)) addGenreBrowser(content);
         if(!"Genres".equals(activeSection)) {
             for(SourceProvider provider:((NsnApplication)getApplication()).sources().all())
                 if(matchesSection(provider.id()))addSourceRail(content,provider,generation);
-        } else {
-            loadGenreMetadata(generation);
         }
         if("Start".equals(activeSection)){
-            genreRowsHost = new LinearLayout(this);
-            genreRowsHost.setOrientation(LinearLayout.VERTICAL);
-            content.addView(genreRowsHost, new LinearLayout.LayoutParams(-1,-2));
-            renderStartGenreRows();
+            // The requested order is source rows (ending with films), real
+            // source genres, then the combined calendar.
+            addGenreChips(content);
+            loadGenreMetadata(generation);
             addCombinedCalendar(content);
+        } else if("Filme".equals(activeSection)){
+            addGenreChips(content);
+            loadGenreMetadata(generation);
+        } else if("Genres".equals(activeSection)){
+            loadGenreMetadata(generation);
         }
         vertical.addView(content, new ScrollView.LayoutParams(-1, -2));
         page.addView(vertical, new LinearLayout.LayoutParams(-1, 0, 1)); root.addView(page, new FrameLayout.LayoutParams(-1,-1));
@@ -337,16 +347,17 @@ public abstract class HomeActivityBase extends Activity {
 
     private void loadGenreMetadata(int generation){
         for(SourceProvider provider:((NsnApplication)getApplication()).sources().all()){
-            Callback<List<HomeSection>> callback=new Callback<List<HomeSection>>(){
-                @Override public void onSuccess(List<HomeSection> sections){
+            provider.genres(new Callback<List<GenreLink>>(){
+                @Override public void onSuccess(List<GenreLink> links){
                     runOnUiThread(()->{
                         if(generation!=homeGeneration)return;
-                        collectGenres(sections);
+                        sourceGenres.put(provider.id(),new ArrayList<>(links));
+                        renderGenreChips();
+                        renderGenreResults();
                     });
                 }
                 @Override public void onError(Throwable error){ }
-            };
-            if(provider.id()==SourceId.FILMPALAST)provider.homePage(1,callback);else provider.home(callback);
+            });
         }
     }
 
@@ -373,41 +384,54 @@ public abstract class HomeActivityBase extends Activity {
     private void renderGenreChips(){
         if(genreChipsHost==null)return;
         genreChipsHost.removeAllViews();
-        HorizontalScrollView scroll=new HorizontalScrollView(this);
-        scroll.setHorizontalScrollBarEnabled(false);
-        LinearLayout row=new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        List<String> genres=new ArrayList<>(genreCatalog.keySet());
-        genres.sort(String.CASE_INSENSITIVE_ORDER);
-        if("Genres".equals(activeSection))row.addView(genreChip("Alle"));
-        for(String genre:genres)row.addView(genreChip(genre));
-        scroll.addView(row,new HorizontalScrollView.LayoutParams(-2,-2));
-        genreChipsHost.addView(scroll,new LinearLayout.LayoutParams(-1,-2));
+        for(SourceProvider provider:((NsnApplication)getApplication()).sources().all()){
+            if("Filme".equals(activeSection)&&provider.id()!=SourceId.FILMPALAST)continue;
+            List<GenreLink> links=new ArrayList<>(sourceGenres.getOrDefault(provider.id(),List.of()));
+            if(links.isEmpty())continue;
+            links.sort(Comparator.comparing(link->link.name,String.CASE_INSENSITIVE_ORDER));
+            TextView sourceHeading=NsnViews.text(this,sourceLabel(provider.id()),isTv()?18:15,Color.WHITE);
+            sourceHeading.setTypeface(null,android.graphics.Typeface.BOLD);
+            sourceHeading.setPadding(NsnViews.dp(this,20),NsnViews.dp(this,8),0,0);
+            genreChipsHost.addView(sourceHeading);
+            HorizontalScrollView scroll=new HorizontalScrollView(this);
+            scroll.setHorizontalScrollBarEnabled(false);
+            LinearLayout row=new LinearLayout(this);row.setOrientation(LinearLayout.HORIZONTAL);
+            for(GenreLink link:links)row.addView(genreChip(link));
+            scroll.addView(row,new HorizontalScrollView.LayoutParams(-2,-2));
+            genreChipsHost.addView(scroll,new LinearLayout.LayoutParams(-1,-2));
+        }
     }
 
-    private View genreChip(String genre){
-        TextView chip=NsnViews.text(this,genre,isTv()?16:14,Color.WHITE);
+    private View genreChip(GenreLink link){
+        TextView chip=NsnViews.text(this,link.name,isTv()?16:14,Color.WHITE);
         chip.setGravity(Gravity.CENTER);
         chip.setSingleLine(true);
         chip.setFocusable(isTv());
         chip.setClickable(true);
-        chip.setTag("genre|"+genre);
+        chip.setTag("genre|"+link.source+"|"+link.url);
         chip.setPadding(NsnViews.dp(this,isTv()?20:14),NsnViews.dp(this,10),
                 NsnViews.dp(this,isTv()?20:14),NsnViews.dp(this,10));
-        boolean selected=genre.equals(selectedGenre);
+        boolean selected=selectedGenreLink!=null&&link.url.equals(selectedGenreLink.url);
         chip.setBackgroundColor(selected?getColor(R.color.nsn_red):Color.argb(220,28,28,28));
         LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(-2,-2);
         params.setMargins(NsnViews.dp(this,10),NsnViews.dp(this,6),NsnViews.dp(this,4),NsnViews.dp(this,12));
         chip.setLayoutParams(params);
         chip.setOnFocusChangeListener((v,focused)->{
-            boolean active=genre.equals(selectedGenre);
+            boolean active=selectedGenreLink!=null&&link.url.equals(selectedGenreLink.url);
             v.setBackgroundColor(focused||active?getColor(R.color.nsn_red):Color.argb(220,28,28,28));
             v.animate().scaleX(focused?1.06f:1f).scaleY(focused?1.06f:1f).setDuration(100).start();
         });
         chip.setOnClickListener(v->{
-            selectedGenre=genre;
-            renderGenreChips();
-            renderGenreResults();
+            selectedGenre=link.name;
+            selectedGenreLink=link;
+            if(!"Genres".equals(activeSection)){
+                activeSection="Genres";
+                pendingFocusKey="genre|"+link.source+"|"+link.url;
+                showHome();
+            }else{
+                renderGenreChips();
+                renderGenreResults();
+            }
         });
         maybeRestoreFocus(chip);
         return chip;
@@ -424,14 +448,38 @@ public abstract class HomeActivityBase extends Activity {
     private void renderGenreResults(){
         if(genreRowsHost==null||!"Genres".equals(activeSection))return;
         genreRowsHost.removeAllViews();
-        if("Alle".equals(selectedGenre)){
-            List<String> genres=new ArrayList<>(genreCatalog.keySet());
-            genres.sort(String.CASE_INSENSITIVE_ORDER);
-            for(String genre:genres)addGenreRail(genreRowsHost,genre,new ArrayList<>(genreCatalog.get(genre).values()));
-            return;
+        if(selectedGenreLink==null)return;
+        List<MediaItem> items=genreResults.get(selectedGenreLink.url);
+        if(items!=null){addGenreRail(genreRowsHost,sourceLabel(selectedGenreLink.source)+" · "+selectedGenre,items);return;}
+        if(!loadingGenres.add(selectedGenreLink.url))return;
+        TextView loading=NsnViews.text(this,"Genre wird geladen …",isTv()?17:14,getColor(R.color.nsn_muted));
+        loading.setPadding(NsnViews.dp(this,20),NsnViews.dp(this,12),0,NsnViews.dp(this,20));
+        genreRowsHost.addView(loading);
+        for(SourceProvider provider:((NsnApplication)getApplication()).sources().all()){
+            if(provider.id()!=selectedGenreLink.source)continue;
+            GenreLink request=selectedGenreLink;
+            provider.genreItems(request.url,new Callback<List<MediaItem>>(){
+                @Override public void onSuccess(List<MediaItem> result){runOnUiThread(()->{
+                    loadingGenres.remove(request.url);
+                    genreResults.put(request.url,new ArrayList<>(result));
+                    if(selectedGenreLink!=null&&request.url.equals(selectedGenreLink.url))renderGenreResults();
+                });}
+                @Override public void onError(Throwable error){runOnUiThread(()->{
+                    loadingGenres.remove(request.url);
+                    if(selectedGenreLink!=null&&request.url.equals(selectedGenreLink.url)){
+                        genreRowsHost.removeAllViews();
+                        genreRowsHost.addView(NsnViews.text(HomeActivityBase.this,"Genre derzeit nicht erreichbar",isTv()?17:14,getColor(R.color.nsn_muted)));
+                    }
+                });}
+            });
+            break;
         }
-        LinkedHashMap<String,MediaItem> items=genreCatalog.get(selectedGenre);
-        if(items!=null)addGenreRail(genreRowsHost,selectedGenre,new ArrayList<>(items.values()));
+    }
+
+    private static String sourceLabel(SourceId source){
+        if(source==SourceId.ANIWORLD)return "AniWorld";
+        if(source==SourceId.SERIENSTREAMS)return "SerienStreams";
+        return "Filmpalast";
     }
 
     private void addGenreRail(LinearLayout target,String genre,List<MediaItem> items){

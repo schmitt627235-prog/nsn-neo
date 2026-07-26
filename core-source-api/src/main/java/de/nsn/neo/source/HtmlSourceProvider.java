@@ -62,6 +62,12 @@ public abstract class HtmlSourceProvider implements SourceProvider {
     @Override public void search(String query, Callback<List<MediaItem>> callback) {
         async(callback, () -> cards(load(origin + "search?q=" + java.net.URLEncoder.encode(query, "UTF-8")), 100));
     }
+    @Override public void genres(Callback<List<GenreLink>> callback) {
+        async(callback, () -> parseGenreLinks(load(homeUrl())));
+    }
+    @Override public void genreItems(String genreUrl, Callback<List<MediaItem>> callback) {
+        async(callback, () -> cards(load(absolute(genreUrl)), 100));
+    }
     @Override public void details(String contentId, Callback<MediaItem> callback) {
         async(callback, () -> parseDetail(load(absolute(contentId)), absolute(contentId)));
     }
@@ -133,6 +139,35 @@ public abstract class HtmlSourceProvider implements SourceProvider {
             }
         }
         return List.of();
+    }
+    protected List<GenreLink> parseGenreLinks(Document doc) {
+        Map<String,GenreLink> unique = new LinkedHashMap<>();
+        collectGenreAnchors(doc.select(
+                ".genres a[href], .genre a[href], [class*=genre] a[href], " +
+                "a[href*=genre], a[href*=kategorie], a[href*=category]"), unique);
+        for (Element heading : doc.select("h1,h2,h3,h4,h5,h6")) {
+            String text=cleanText(heading.text()).toLowerCase(java.util.Locale.ROOT);
+            if (!text.equals("genres") && !text.equals("genre")
+                    && !text.equals("kategorien") && !text.equals("kategorie")) continue;
+            Element container=heading.parent();
+            for(int depth=0;container!=null&&depth<3;depth++,container=container.parent()){
+                int before=unique.size();
+                collectGenreAnchors(container.select("a[href]"),unique);
+                if(unique.size()-before>=3)break;
+            }
+        }
+        return new ArrayList<>(unique.values());
+    }
+    private void collectGenreAnchors(Iterable<Element> anchors,Map<String,GenreLink> target){
+        for(Element link:anchors){
+            String name=cleanText(link.text());
+            if(name.isBlank())name=cleanText(first(link.attr("title"),link.attr("aria-label")));
+            String url=link.absUrl("href");
+            if(url.isBlank())url=absolute(link.attr("href"));
+            if(name.isBlank()||url.isBlank()||url.contains("/anime/stream/")
+                    ||url.contains("/serie/")||url.contains("/stream/"))continue;
+            target.putIfAbsent(url,new GenreLink(id,name,url));
+        }
     }
     protected MediaItem parseDetail(Document doc, String url) {
         Element h1 = doc.selectFirst("h1[itemprop=name], h1");
