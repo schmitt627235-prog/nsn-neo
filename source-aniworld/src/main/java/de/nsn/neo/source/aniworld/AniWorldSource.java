@@ -61,7 +61,11 @@ public final class AniWorldSource extends HtmlSourceProvider {
             if(title.isBlank()||url.isBlank())continue;
             Element tag=link.selectFirst(".listTag");String episode=tag==null?"":cleanText(tag.text());
             String description=episode.isBlank()?"Neueste Episode":"Neueste Episode Â· "+episode;
-            result.add(new MediaItem(url+"#latest-"+index++,id(),ContentType.ANIME,title,description,null,null,url,List.of(),null,null));
+            Element image=findCardImage(link);String poster=imageUrl(image);
+            if(poster==null){
+                try{MediaItem detail=parseDetail(load(url),url);poster=detail.posterUrl;}catch(Exception ignored){}
+            }
+            result.add(new MediaItem(url+"#latest-"+index++,id(),ContentType.ANIME,title,description,poster,poster,url,List.of(),null,null));
         }
         return result;
     }
@@ -85,9 +89,25 @@ public final class AniWorldSource extends HtmlSourceProvider {
         for(int i=0;i<data.length();i++){org.json.JSONObject hit=data.optJSONObject(i);if(hit==null)continue;
             String title=org.jsoup.Jsoup.parse(hit.optString("title")).text().trim();String url=absolute(hit.optString("link"));if(title.isBlank()||url.isBlank()||url.contains("/staffel-"))continue;
             String description=org.jsoup.Jsoup.parse(hit.optString("description")).text().trim();
-            result.add(new MediaItem(url,id(),ContentType.ANIME,title,description,null,null,url,List.of(),null,null));
+            String poster=searchPoster(hit);
+            if(poster==null){
+                try{MediaItem detail=parseDetail(load(url),url);poster=detail.posterUrl;}catch(Exception ignored){}
+            }
+            result.add(new MediaItem(url,id(),ContentType.ANIME,title,description,poster,poster,url,List.of(),null,null));
         }return result;
     });}
+    private String searchPoster(org.json.JSONObject hit){
+        String[] keys={"cover","coverUrl","cover_url","poster","posterUrl","poster_url",
+                "image","imageUrl","image_url","thumbnail","thumb"};
+        for(String key:keys){
+            String raw=hit.optString(key);if(raw==null||raw.isBlank())continue;
+            Document fragment=org.jsoup.Jsoup.parseBodyFragment(raw,activeBase);
+            Element image=fragment.selectFirst("img");
+            String value=image==null?raw:imageUrl(image);
+            if(value!=null&&!value.isBlank()&&!value.startsWith("data:"))return absolute(value);
+        }
+        return null;
+    }
     @Override public void languages(String contentId,String episodeId,Callback<List<String>> callback){async(callback,()->{
         Document doc=load(absolute(episodeId==null?contentId:episodeId));
         java.util.LinkedHashSet<String> result=new java.util.LinkedHashSet<>();

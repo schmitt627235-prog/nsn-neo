@@ -258,22 +258,59 @@ public abstract class HtmlSourceProvider implements SourceProvider {
     protected static String titleOf(Element link) { Element title = link.selectFirst("h1,h2,h3,h4,.seriesListTitle,.seriesTitle,[itemprop=name]"); return title == null ? link.attr("title").trim() : title.text().trim(); }
     protected static String first(String a, String b) { return a != null && !a.isBlank() ? a : b; }
     protected Element findCardImage(Element link) {
-        Element image = link.selectFirst("img");
+        Element image = firstUsableImage(link);
         Element parent = link.parent();
         for (int depth = 0; image == null && parent != null && depth < 5; depth++, parent = parent.parent()) {
-            image = parent.selectFirst("img[data-src], img[src], source[data-srcset], source[srcset]");
+            image = firstUsableImage(parent);
         }
         return image;
     }
+    private Element firstUsableImage(Element root) {
+        for (Element image : root.select(
+                "img[data-original],img[data-lazy-src],img[data-src],img[data-url],img[srcset],img[src]," +
+                "source[data-srcset],source[srcset],[data-background-image],[data-bg],[style*=background-image]")) {
+            if (imageUrl(image) != null) return image;
+        }
+        return null;
+    }
     protected String imageUrl(Element image) {
         if (image == null) return null;
-        String value = first(image.attr("data-src"), image.attr("src"));
-        if (value == null || value.isBlank() || value.startsWith("data:")) {
-            value = first(image.attr("data-srcset"), image.attr("srcset"));
-            if (value != null && value.contains(",")) value = value.substring(0, value.indexOf(','));
-            if (value != null) value = value.trim().split("\\s+")[0];
+        String[] candidates={image.attr("data-original"),image.attr("data-lazy-src"),
+                image.attr("data-src"),image.attr("data-url"),image.attr("data-srcset"),
+                image.attr("srcset"),image.attr("data-background-image"),image.attr("data-bg"),image.attr("src")};
+        for(String candidate:candidates){
+            String value=bestSrcsetCandidate(candidate);
+            if(isUsableCoverUrl(value,image))return absolute(value);
         }
-        return value == null || value.isBlank() || value.startsWith("data:") ? null : absolute(value);
+        java.util.regex.Matcher css=java.util.regex.Pattern
+                .compile("(?i)background(?:-image)?\\s*:\\s*url\\(['\\\"]?([^)'\\\"]+)")
+                .matcher(image.attr("style"));
+        return css.find()&&isUsableCoverUrl(css.group(1),image)?absolute(css.group(1)):null;
+    }
+    private static String bestSrcsetCandidate(String value){
+        if(value==null||value.isBlank())return null;
+        String best=null;int bestWidth=-1;
+        for(String entry:value.split(",")){
+            String[] parts=entry.trim().split("\\s+");if(parts.length==0)continue;int width=0;
+            if(parts.length>1){java.util.regex.Matcher size=java.util.regex.Pattern.compile("(\\d+)").matcher(parts[parts.length-1]);
+                if(size.find())try{width=Integer.parseInt(size.group(1));}catch(Exception ignored){}}
+            if(best==null||width>=bestWidth){best=parts[0];bestWidth=width;}
+        }
+        return best;
+    }
+    private static boolean isUsableCoverUrl(String value,Element image){
+        if(value==null||value.isBlank())return false;
+        String hint=(value+" "+image.attr("class")+" "+image.attr("alt")+" "+image.attr("title")).toLowerCase(java.util.Locale.ROOT);
+        if(hint.startsWith("data:")||hint.startsWith("javascript:")||hint.contains("favicon")
+                ||hint.contains("placeholder")||hint.contains("no-image")||hint.contains("no_image")
+                ||hint.contains("default-cover")||hint.contains("loading.")||hint.contains("spinner")
+                ||hint.contains("pixel.gif")||hint.contains("star.")||hint.contains("/stars/")||hint.contains("nsn_logo"))return false;
+        int width=parseDimension(image.attr("width")),height=parseDimension(image.attr("height"));
+        return width<=0||height<=0||width>=120||height>=120;
+    }
+    private static int parseDimension(String value){
+        if(value==null)return 0;java.util.regex.Matcher matcher=java.util.regex.Pattern.compile("\\d+").matcher(value);
+        if(!matcher.find())return 0;try{return Integer.parseInt(matcher.group());}catch(Exception ignored){return 0;}
     }
     private static boolean isDirectVideo(String url) {
         if (url == null) return false;

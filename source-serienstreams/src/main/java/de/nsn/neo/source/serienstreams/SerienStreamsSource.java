@@ -29,7 +29,11 @@ public final class SerienStreamsSource extends HtmlSourceProvider {
             Element image=article.selectFirst("img[data-src],img[src]");if(image==null)image=article.selectFirst("source[data-srcset],source[srcset]");
             if(link==null||image==null)continue;String url=link.absUrl("href");if(url.isBlank())url=absolute(link.attr("href"));
             String title=image.attr("alt").replaceFirst("(?i)\\s+backdrop\\s*$","").trim();if(title.isBlank()){Element heading=article.selectFirst("h1,h2,h3,h4");title=heading==null?link.text().trim():heading.text().trim();}
-            String poster=imageUrl(image);if(title.isBlank()||poster==null||poster.isBlank()||!accepts(link,title,url))continue;
+            String poster=imageUrl(image);
+            if(poster==null){
+                try{MediaItem detail=parseDetail(load(url),url);poster=detail.posterUrl;}catch(Exception ignored){}
+            }
+            if(title.isBlank()||poster==null||poster.isBlank()||!accepts(link,title,url))continue;
             unique.putIfAbsent(url,new MediaItem(url,id(),ContentType.SERIES,title,"",poster,poster,url,List.of(),null,null));
             if(unique.size()>=limit)break;
         }

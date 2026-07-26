@@ -43,6 +43,9 @@ public final class FilmpalastSource extends HtmlSourceProvider {
             String url=link.absUrl("href");if(url.isBlank())url=absolute(link.attr("href"));String title=cleanText(titleOf(link));
             if(title.isBlank()){Element img=findCardImage(link);if(img!=null)title=cleanText(img.attr("alt").replaceFirst("(?i)^stream\\s+",""));}
             if(title.isBlank()||!matchesQuery(title,query))continue;Element image=findCardImage(link);String poster=imageUrl(image);
+            if(poster==null){
+                try{MediaItem detail=parseDetail(load(url),url);poster=detail.posterUrl;}catch(Exception ignored){}
+            }
             unique.putIfAbsent(url,new MediaItem(url,id(),ContentType.MOVIE,title,"",poster,poster,url,List.of(),null,null));if(unique.size()>=100)break;
         }return new ArrayList<>(unique.values());
     });}
