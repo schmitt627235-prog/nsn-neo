@@ -132,8 +132,51 @@ public final class AniWorldSource extends HtmlSourceProvider {
             if(poster!=null)return poster;
             Element meta=detail.selectFirst("meta[property=og:image],meta[name=twitter:image]");
             if(meta!=null&&!meta.attr("content").isBlank())return absolute(meta.attr("content"));
+            poster=aniListPoster(detail);
+            if(poster!=null)return poster;
         }catch(Exception ignored){}
         return null;
+    }
+    private String aniListPoster(Document detail){
+        java.util.LinkedHashSet<String> titles=new java.util.LinkedHashSet<>();
+        Element heading=detail.selectFirst("h1,[itemprop=name]");
+        if(heading!=null&&!heading.text().isBlank())titles.add(cleanText(heading.text()));
+        for(Element value:detail.select("[itemprop=alternateName],.series-meta li,.series-meta [title]")){
+            String text=cleanText(value.hasAttr("content")?value.attr("content"):value.text())
+                    .replaceFirst("(?i)^(alternativtitel|originaltitel|englischer titel)\\s*:?\\s*","");
+            if(!text.isBlank()&&text.length()<160)for(String part:text.split("\\s*[,;/|]\\s*"))
+                if(!part.isBlank())titles.add(part.trim());
+        }
+        for(String title:titles)try{
+            String query="query($search:String){Media(search:$search,type:ANIME){title{romaji english native}synonyms coverImage{extraLarge large}}}";
+            String variables=new org.json.JSONObject().put("search",title).toString();
+            String url="https://graphql.anilist.co/?query="+java.net.URLEncoder.encode(query,java.nio.charset.StandardCharsets.UTF_8)
+                    +"&variables="+java.net.URLEncoder.encode(variables,java.nio.charset.StandardCharsets.UTF_8);
+            org.json.JSONObject media=new org.json.JSONObject(transport.get(url))
+                    .optJSONObject("data").optJSONObject("Media");
+            if(media==null||!aniListTitleMatches(media,title))continue;
+            org.json.JSONObject image=media.optJSONObject("coverImage");
+            if(image!=null){
+                String poster=image.optString("extraLarge",image.optString("large"));
+                if(!poster.isBlank())return poster;
+            }
+        }catch(Exception ignored){}
+        return null;
+    }
+    private static boolean aniListTitleMatches(org.json.JSONObject media,String wanted){
+        String normalized=normalizeTitle(wanted);
+        org.json.JSONObject names=media.optJSONObject("title");
+        if(names!=null)for(String key:List.of("romaji","english","native"))
+            if(normalized.equals(normalizeTitle(names.optString(key))))return true;
+        org.json.JSONArray synonyms=media.optJSONArray("synonyms");
+        if(synonyms!=null)for(int i=0;i<synonyms.length();i++)
+            if(normalized.equals(normalizeTitle(synonyms.optString(i))))return true;
+        return false;
+    }
+    private static String normalizeTitle(String value){
+        return java.text.Normalizer.normalize(value==null?"":value,java.text.Normalizer.Form.NFKD)
+                .replaceAll("\\p{M}+","").replaceAll("[^\\p{L}\\p{N}]","")
+                .toLowerCase(java.util.Locale.ROOT);
     }
     private String aniWorldCoverUrl(Element cover,String detailUrl){
         if(cover==null)return null;
