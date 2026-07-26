@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -164,10 +165,38 @@ public abstract class HtmlSourceProvider implements SourceProvider {
             if(name.isBlank())name=cleanText(first(link.attr("title"),link.attr("aria-label")));
             String url=link.absUrl("href");
             if(url.isBlank())url=absolute(link.attr("href"));
-            if(name.isBlank()||url.isBlank()||url.contains("/anime/stream/")
+            if(name.isBlank()||!allowedGenreNames().contains(normalizedGenreName(name))
+                    ||url.isBlank()||url.contains("/anime/stream/")
                     ||url.contains("/serie/")||url.contains("/stream/"))continue;
             target.putIfAbsent(url,new GenreLink(id,name,url));
         }
+    }
+    private Set<String> allowedGenreNames(){
+        if(id==SourceId.ANIWORLD)return Set.of(
+                "abenteuer","action","actiondrama","actionkomodie","alltagsleben","alltagsdrama",
+                "boys love","drama","ecchi","engsub","erotik","fantasy","fighting shounen",
+                "ganbatte","geistergeschichten","ger","gersub","harem","horror","komodie","krimi",
+                "liebesdrama","magical girl","mecha","mystery","nonsense komodie","psychodrama",
+                "romantische komodie","romanze","scifi","sport","thriller","yuri",
+                "ubermassige gewaltdarstellung");
+        if(id==SourceId.SERIENSTREAMS)return Set.of(
+                "abenteuer","action","animation","anime","comedy","dokumentation","doku soap",
+                "drama","dramedy","familie","fantasy","historie","horror","jugend","kinderserie",
+                "krankenhausserie","krimi","mystery","romantik","science fiction","sitcom",
+                "telenovela","thriller","western","zeichentrick","k drama","reality tv","true crime");
+        return Set.of(
+                "abenteuer","action","animation","biographie","dokumentation","drama","englisch",
+                "familie","fantasy","geschichte","horror","komodie","krieg","krimi","musik",
+                "mystery","romantik","sci fi","sport","thriller","western","zeichentrick");
+    }
+    private static String normalizedGenreName(String value){
+        return java.text.Normalizer.normalize(value,java.text.Normalizer.Form.NFD)
+                .replaceAll("\\p{M}+","")
+                .toLowerCase(java.util.Locale.ROOT)
+                .replace("-"," ")
+                .replace("_"," ")
+                .replaceAll("\\s+"," ")
+                .trim();
     }
     protected MediaItem parseDetail(Document doc, String url) {
         Element h1 = doc.selectFirst("h1[itemprop=name], h1");

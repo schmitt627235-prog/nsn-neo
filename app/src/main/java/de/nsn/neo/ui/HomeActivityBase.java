@@ -485,20 +485,16 @@ public abstract class HomeActivityBase extends Activity {
         if(genre.equals("abenteuer")||genre.equals("adventure"))return "Abenteuer";
         if(genre.equals("animation")||genre.equals("zeichentrick"))return "Animation";
         if(genre.equals("anime"))return "Anime";
-        if(genre.contains("komodie")||genre.equals("comedy")||genre.equals("sitcom")
-                ||genre.equals("dramedy")||genre.equals("nonsense comedy"))return "Komödie";
-        if(genre.contains("drama"))return "Drama";
-        if(genre.equals("dokumentation")||genre.equals("documentary")
-                ||genre.equals("doku soap")||genre.equals("true crime"))return "Dokumentation";
-        if(genre.equals("familie")||genre.equals("family")||genre.equals("kinderserie")
-                ||genre.equals("jugend"))return "Familie";
+        if(genre.equals("komodie")||genre.equals("comedy"))return "Komödie";
+        if(genre.equals("drama"))return "Drama";
+        if(genre.equals("dokumentation")||genre.equals("documentary"))return "Dokumentation";
+        if(genre.equals("familie")||genre.equals("family"))return "Familie";
         if(genre.equals("fantasy"))return "Fantasy";
         if(genre.equals("geschichte")||genre.equals("historie"))return "Historie";
         if(genre.equals("horror"))return "Horror";
         if(genre.equals("krimi")||genre.equals("crime"))return "Krimi";
         if(genre.equals("mystery"))return "Mystery";
-        if(genre.equals("romantik")||genre.equals("romanze")||genre.equals("romance")
-                ||genre.equals("romantische komodie"))return "Romantik";
+        if(genre.equals("romantik")||genre.equals("romanze")||genre.equals("romance"))return "Romantik";
         if(genre.equals("sci fi")||genre.equals("scifi")||genre.equals("science fiction"))return "Science-Fiction";
         if(genre.equals("sport"))return "Sport";
         if(genre.equals("thriller"))return "Thriller";
